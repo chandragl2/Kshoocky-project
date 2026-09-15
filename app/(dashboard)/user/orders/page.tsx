@@ -1,1 +1,5 @@
-export default function Page() { return <div>Placeholder</div>; }
+import UserWorkspacePanel from "@/components/UserWorkspacePanel";
+
+export default function UserOrdersPage() {
+  return <UserWorkspacePanel variant="orders" />;
+}
