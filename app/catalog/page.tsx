@@ -327,7 +327,9 @@ function CatalogLanding() {
             <section className="min-w-0">
               <div className="flex min-h-14 items-center justify-between rounded-2xl border border-[#e8e5e1] bg-white px-4 shadow-[0_6px_20px_rgba(15,56,84,0.04)] sm:px-5">
                 <p className="text-sm text-[#526174]">
-                  <span className="font-extrabold text-[#172036]">{filteredProducts.length}</span>{" "}
+                  <span className="font-extrabold text-[#172036]">
+                    {filteredProducts.length}
+                  </span>{" "}
                   produk
                 </p>
                 <label className="flex items-center gap-2 text-sm text-[#526174]">
