@@ -1,5 +1,6 @@
 import { Heart, Star } from "lucide-react";
 import Image from "next/image";
+import { useState } from "react";
 
 export type Product = {
   title: string;
@@ -13,6 +14,8 @@ export type Product = {
 };
 
 export default function ProductCard({ product }: { product: Product }) {
+  const [isFavorite, setIsFavorite] = useState(false);
+
   return (
     <article className="group min-w-0">
       <div
@@ -24,10 +27,16 @@ export default function ProductCard({ product }: { product: Product }) {
           </span>
         )}
         <button
+          type="button"
           aria-label={`Simpan ${product.title}`}
-          className="absolute bottom-3 right-3 z-10 text-white transition-transform group-hover:scale-110"
+          aria-pressed={isFavorite}
+          onClick={() => setIsFavorite(!isFavorite)}
+          className={`absolute bottom-3 right-3 z-10 transition-transform group-hover:scale-110 ${isFavorite ? "text-[#e85d75]" : "text-white"}`}
         >
-          <Heart className="h-5 w-5" />
+          <Heart
+            className="h-5 w-5"
+            fill={isFavorite ? "currentColor" : "none"}
+          />
         </button>
         {product.image ? (
           <Image
