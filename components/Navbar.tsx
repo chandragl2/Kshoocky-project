@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Search, ShoppingBag, UserRound } from "lucide-react";
+import { Menu, Search, ShoppingBag, UserRound } from "lucide-react";
 
 export default function Navbar() {
   return (
@@ -27,25 +27,25 @@ export default function Navbar() {
               Beranda
             </Link>
             <Link
+              href="/preorder"
+              className="hover:text-[#2563eb] transition-colors"
+            >
+              Pre Order
+            </Link>
+            <Link
+              href="/tracking"
+              className="hover:text-[#2563eb] transition-colors"
+            >
+              Pelacakan
+            </Link>
+            <Link
               href="/catalog"
               className="hover:text-[#2563eb] transition-colors"
             >
-              Preorder
+              Katalog
             </Link>
             <Link
-              href="#lacak"
-              className="hover:text-[#2563eb] transition-colors"
-            >
-              Lacak
-            </Link>
-            <Link
-              href="#faq"
-              className="hover:text-[#2563eb] transition-colors"
-            >
-              FAQ
-            </Link>
-            <Link
-              href="#footer"
+              href="/about"
               className="hover:text-[#2563eb] transition-colors"
             >
               Tentang Kami
@@ -81,12 +81,20 @@ export default function Navbar() {
             </Link>
             <Link
               href="/register"
-              className="bg-[#b86645] hover:bg-[#2563eb] text-white font-semibold py-2.5 px-5 rounded-full text-[13px] transition-colors shadow-sm"
+              className="bg-[#0F3854] hover:bg-[#2563eb] text-white font-semibold py-2.5 px-5 rounded-full text-[13px] transition-colors shadow-sm"
             >
-              Daftar
+              Daftar Sekarang <span aria-hidden="true">→</span>
             </Link>
           </div>
         </div>
+
+        <button
+          type="button"
+          aria-label="Buka menu navigasi"
+          className="text-[#334155] lg:hidden"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
       </div>
     </nav>
   );

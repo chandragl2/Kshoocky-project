@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
+  PackageOpen,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
@@ -13,57 +15,44 @@ import ProductCard, { Product } from "@/components/ProductCard";
 
 const PRODUCTS: Product[] = [
   {
-    title: "[Pre Order] JIN 'ECHO' Album",
-    price: "Rp 134,000",
+    title: "Daily Comma Woody Garden Eau de Parfum",
+    price: "Rp 349.000",
     rating: "4.91",
-    category: "BTS",
-    tone: "bg-[#e8e8e6]",
+    category: "Parfum",
+    image: "/Product/parfum.png",
+    tone: "bg-[#f1f1ef]",
     accent: "text-[#706c69]",
     badge: "Pre order",
   },
   {
-    title: "[Pre Order] BTS Permission To Dance On Stage - Live",
-    price: "Rp 294,000",
+    title: "Daily Comma Signal Berry Eau de Parfum",
+    price: "Rp 349.000",
     rating: "4.88",
-    category: "BTS",
-    tone: "bg-[#f5c5aa]",
+    category: "Parfum",
+    image: "/Product/parfum 2.png",
+    tone: "bg-[#f5e8e6]",
     accent: "text-white",
     badge: "Pre order",
   },
   {
-    title: "Pre Order (PO): BTS Arirang Album 2026",
-    price: "Rp 163,000",
+    title: "Daily Comma Musk Muhwaga Eau de Parfum",
+    price: "Rp 349.000",
     rating: "5",
-    category: "BTS",
-    tone: "bg-[#f4f1ed]",
+    category: "Parfum",
+    image: "/Product/parfum 3.png",
+    tone: "bg-[#eef1ef]",
     accent: "text-[#77716d]",
     badge: "Pre order",
   },
   {
-    title: "[Pre Order] TOMORROW X TOGETHER - The Star Chapter",
-    price: "Rp 265,000",
+    title: "Daily Comma Cotton White Eau de Parfum",
+    price: "Rp 349.000",
     rating: "4.96",
-    category: "TOMORROW X TOGETHER",
-    tone: "bg-[#dfe8e2]",
+    category: "Parfum",
+    image: "/Product/parfum 4.png",
+    tone: "bg-[#f5f4ef]",
     accent: "text-[#4f6658]",
     badge: "Pre order",
-  },
-  {
-    title: "[Pre Order] ENHYPEN - DESIRE : UNLEASH",
-    price: "Rp 278,000",
-    rating: "4.90",
-    category: "ENHYPEN",
-    tone: "bg-[#d8d9e3]",
-    accent: "text-[#414352]",
-    badge: "Pre order",
-  },
-  {
-    title: "[Pre Order] KPOP Lightstick & Official Goods",
-    price: "Rp 550,000",
-    rating: "4.87",
-    category: "OTHERS",
-    tone: "bg-[#eadcc8]",
-    accent: "text-[#795e48]",
   },
 ];
 
@@ -116,7 +105,7 @@ function Check({
   );
 }
 
-export default function Page() {
+function PreorderPage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Semua");
   const filteredProducts = useMemo(
@@ -134,7 +123,7 @@ export default function Page() {
       <Navbar />
       <main className="bg-[#fffdfb] text-[#332d2a]">
         <section className="mx-auto max-w-[1320px] px-5 pt-5 lg:px-8 lg:pt-7">
-          <div className="relative flex min-h-[215px] items-end overflow-hidden bg-[#d8753b] px-6 py-7 sm:min-h-[285px] sm:px-10 lg:px-14">
+          <div className="relative flex min-h-[215px] items-end overflow-hidden bg-[#0F3854] px-6 py-7 sm:min-h-[285px] sm:px-10 lg:px-14">
             <div className="absolute -right-10 -top-16 h-64 w-64 rounded-full border-[26px] border-[#f1b15d]/90 opacity-90" />
             <div className="absolute right-[22%] top-10 h-28 w-28 rounded-full bg-[#8bc5d4] opacity-90" />
             <div className="relative max-w-xl text-white">
@@ -164,38 +153,15 @@ export default function Page() {
               </label>
             </div>
             <FilterSection title="Kategori">
-              <Check checked={category === "BTS"}>
+              <Check checked={category === "Parfum"}>
                 <button
                   onClick={() =>
-                    setCategory(category === "BTS" ? "Semua" : "BTS")
+                    setCategory(category === "Parfum" ? "Semua" : "Parfum")
                   }
                 >
-                  BTS
+                  Parfum
                 </button>
               </Check>
-              <Check checked={category === "TOMORROW X TOGETHER"}>
-                <button
-                  onClick={() =>
-                    setCategory(
-                      category === "TOMORROW X TOGETHER"
-                        ? "Semua"
-                        : "TOMORROW X TOGETHER",
-                    )
-                  }
-                >
-                  TOMORROW X TOGETHER
-                </button>
-              </Check>
-              <Check checked={category === "ENHYPEN"}>
-                <button
-                  onClick={() =>
-                    setCategory(category === "ENHYPEN" ? "Semua" : "ENHYPEN")
-                  }
-                >
-                  ENHYPEN
-                </button>
-              </Check>
-              <Check>OTHERS</Check>
               <Check checked={category === "Semua"}>Semua Pre Order</Check>
             </FilterSection>
             <FilterSection title="Tipe Produk">
@@ -254,3 +220,158 @@ export default function Page() {
     </>
   );
 }
+
+function CatalogLanding() {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("Semua kategori");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const filteredProducts = useMemo(() => {
+    const minimum = Number(minPrice.replace(/\D/g, "")) || 0;
+    const maximum = Number(maxPrice.replace(/\D/g, "")) || Infinity;
+
+    return PRODUCTS.filter((product) => {
+      const price = Number(product.price.replace(/\D/g, ""));
+      return (
+        (category === "Semua kategori" || product.category === category) &&
+        product.title.toLowerCase().includes(query.toLowerCase()) &&
+        price >= minimum &&
+        price <= maximum
+      );
+    });
+  }, [category, maxPrice, minPrice, query]);
+
+  function resetFilters() {
+    setQuery("");
+    setCategory("Semua kategori");
+    setMinPrice("");
+    setMaxPrice("");
+  }
+
+  return (
+    <>
+      <Navbar />
+      <main className="min-h-[calc(100vh-80px)] bg-[#f5f6f7] px-4 py-5 text-[#172036] sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1320px]">
+          <div className="mb-5 rounded-2xl border border-[#e8e5e1] bg-white p-4 shadow-[0_6px_20px_rgba(15,56,84,0.04)] sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#b86645]">
+                  KSHOOCKY shop
+                </p>
+                <h1 className="mt-1 text-2xl font-extrabold text-[#0F3854] sm:text-3xl">
+                  Katalog Produk
+                </h1>
+              </div>
+              <label className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-[#dfe3e8] bg-[#fbfcfd] px-4 transition-colors focus-within:border-[#0F3854] focus-within:ring-2 focus-within:ring-[#0F3854]/10 lg:max-w-[430px]">
+                <Search className="h-5 w-5 shrink-0 text-[#8290a0]" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Cari produk katalog"
+                  className="w-full bg-transparent text-sm text-[#172036] outline-none placeholder:text-[#9aa5b1]"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <aside className="space-y-5">
+              <section className="rounded-2xl border border-[#e8e5e1] bg-white p-4 shadow-[0_6px_20px_rgba(15,56,84,0.04)]">
+                <h2 className="text-sm font-extrabold text-[#172036]">
+                  Kategori
+                </h2>
+                <button
+                  onClick={() => setCategory("Semua kategori")}
+                  className={`mt-4 w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition-colors ${category === "Semua kategori" ? "bg-[#E5B869] text-[#172036]" : "text-[#526174] hover:bg-[#fff7e5]"}`}
+                >
+                  Semua kategori
+                </button>
+                <button
+                  onClick={() => setCategory("Parfum")}
+                  className={`mt-1 w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${category === "Parfum" ? "bg-[#E5B869] text-[#172036]" : "text-[#526174] hover:bg-[#fff7e5]"}`}
+                >
+                  Parfum
+                </button>
+              </section>
+
+              <section className="rounded-2xl border border-[#e8e5e1] bg-white p-4 shadow-[0_6px_20px_rgba(15,56,84,0.04)]">
+                <h2 className="text-sm font-extrabold text-[#172036]">
+                  Rentang Harga
+                </h2>
+                <div className="mt-4 space-y-2">
+                  <input
+                    value={minPrice}
+                    onChange={(event) => setMinPrice(event.target.value)}
+                    placeholder="Min (Rp)"
+                    inputMode="numeric"
+                    className="h-10 w-full rounded-lg border border-[#dfe3e8] px-3 text-sm outline-none placeholder:text-[#9aa5b1] focus:border-[#0F3854]"
+                  />
+                  <input
+                    value={maxPrice}
+                    onChange={(event) => setMaxPrice(event.target.value)}
+                    placeholder="Maks (Rp)"
+                    inputMode="numeric"
+                    className="h-10 w-full rounded-lg border border-[#dfe3e8] px-3 text-sm outline-none placeholder:text-[#9aa5b1] focus:border-[#0F3854]"
+                  />
+                </div>
+                <button
+                  onClick={resetFilters}
+                  className="mt-3 w-full text-center text-xs font-semibold text-[#0F3854] hover:text-[#b86645]"
+                >
+                  Reset filter
+                </button>
+              </section>
+            </aside>
+
+            <section className="min-w-0">
+              <div className="flex min-h-14 items-center justify-between rounded-2xl border border-[#e8e5e1] bg-white px-4 shadow-[0_6px_20px_rgba(15,56,84,0.04)] sm:px-5">
+                <p className="text-sm text-[#526174]">
+                  <span className="font-extrabold text-[#172036]">{filteredProducts.length}</span>{" "}
+                  produk
+                </p>
+                <label className="flex items-center gap-2 text-sm text-[#526174]">
+                  <span className="hidden sm:inline">Urutkan</span>
+                  <select className="rounded-lg border border-[#dfe3e8] bg-white px-3 py-2 font-semibold text-[#172036] outline-none">
+                    <option>Terbaru</option>
+                    <option>Nama A-Z</option>
+                  </select>
+                </label>
+              </div>
+
+              {filteredProducts.length > 0 ? (
+                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {filteredProducts.map((product) => (
+                    <ProductCard key={product.title} product={product} />
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-5 flex min-h-[390px] flex-col items-center justify-center rounded-2xl border border-[#e8e5e1] bg-white px-6 text-center shadow-[0_6px_20px_rgba(15,56,84,0.04)]">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f2f7fa] text-[#0F3854]">
+                    <PackageOpen className="h-9 w-9" strokeWidth={1.7} />
+                  </div>
+                  <h2 className="mt-5 text-xl font-extrabold text-[#172036]">
+                    Produk tidak ditemukan
+                  </h2>
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-[#8290a0]">
+                    Coba ubah kata kunci atau rentang harga yang kamu pilih.
+                  </p>
+                  <button
+                    onClick={resetFilters}
+                    className="mt-6 rounded-lg bg-[#0F3854] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#174d70]"
+                  >
+                    Reset filter
+                  </button>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+export { PreorderPage };
+export default CatalogLanding;

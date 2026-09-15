@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from "next/link";
 
 export default function CtaSection() {
   return (
@@ -10,12 +10,12 @@ export default function CtaSection() {
         Siap Belanja Produk Korea?
       </h2>
       <p className="text-gray-500 text-lg mb-10 max-w-lg leading-relaxed">
-        Tinggal klik, checkout, dan terima di Indonesia — belanja jadi lebih mudah
-        bersama KSHOOCKY.
+        Tinggal klik, checkout, dan terima di Indonesia — belanja jadi lebih
+        mudah bersama KSHOOCKY.
       </p>
       <div className="flex flex-wrap gap-4 justify-center">
         <Link
-          href="/catalog"
+          href="/preorder"
           className="bg-[#E5B869] hover:bg-[#d4a858] text-[#0B1320] font-bold py-4 px-10 rounded-full transition-colors shadow-md"
         >
           Mulai Belanja Sekarang →

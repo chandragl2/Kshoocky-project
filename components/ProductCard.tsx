@@ -1,10 +1,12 @@
 import { Heart, Star } from "lucide-react";
+import Image from "next/image";
 
 export type Product = {
   title: string;
   price: string;
   rating: string;
   category: string;
+  image?: string;
   tone: string;
   accent: string;
   badge?: string;
@@ -27,19 +29,29 @@ export default function ProductCard({ product }: { product: Product }) {
         >
           <Heart className="h-5 w-5" />
         </button>
-        <div
-          className={`absolute inset-[13%] flex flex-col items-center justify-center text-center ${product.accent}`}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-[0.25em] opacity-70">
-            KSHOOCKY SELECT
-          </span>
-          <strong className="mt-3 max-w-[80%] text-2xl font-extrabold leading-[0.95] sm:text-3xl">
-            {product.title.split(" ").slice(0, 3).join(" ")}
-          </strong>
-          <span className="mt-4 border-t border-current/40 pt-2 text-[8px] uppercase tracking-[0.2em]">
-            Official pre order
-          </span>
-        </div>
+        {product.image ? (
+          <Image
+            src={product.image}
+            alt={product.title}
+            fill
+            sizes="(min-width: 1024px) 260px, (min-width: 640px) 30vw, 45vw"
+            className="object-contain p-2 transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div
+            className={`absolute inset-[13%] flex flex-col items-center justify-center text-center ${product.accent}`}
+          >
+            <span className="text-[10px] font-bold uppercase tracking-[0.25em] opacity-70">
+              KSHOOCKY SELECT
+            </span>
+            <strong className="mt-3 max-w-[80%] text-2xl font-extrabold leading-[0.95] sm:text-3xl">
+              {product.title.split(" ").slice(0, 3).join(" ")}
+            </strong>
+            <span className="mt-4 border-t border-current/40 pt-2 text-[8px] uppercase tracking-[0.2em]">
+              Official pre order
+            </span>
+          </div>
+        )}
       </div>
       <h2 className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-[#332d2a]">
         {product.title}

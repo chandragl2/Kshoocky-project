@@ -3,11 +3,96 @@
 @tailwind utilities;
 
 :root {
-  --background: #F9F9F9;
+  --background: #f9f9f9;
   --foreground: #1a1a1a;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+@keyframes heroFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroTitleReveal {
+  from {
+    opacity: 0;
+    transform: translateY(34px) rotate(2deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@keyframes heroCardReveal {
+  from {
+    opacity: 0;
+    transform: translateY(34px) rotate(2deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0) scale(1);
+  }
+}
+
+.hero-fade,
+.hero-title-line,
+.hero-card-reveal {
+  opacity: 0;
+  animation-fill-mode: forwards;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hero-fade {
+  animation-name: heroFadeUp;
+  animation-duration: 700ms;
+}
+
+.hero-title-line {
+  animation-name: heroTitleReveal;
+  animation-duration: 800ms;
+}
+
+.hero-card-reveal {
+  animation-name: heroCardReveal;
+  animation-duration: 900ms;
+  animation-delay: 350ms;
+}
+
+.hero-delay-1 {
+  animation-delay: 100ms;
+}
+.hero-delay-2 {
+  animation-delay: 220ms;
+}
+.hero-delay-3 {
+  animation-delay: 340ms;
+}
+.hero-delay-4 {
+  animation-delay: 460ms;
+}
+.hero-delay-5 {
+  animation-delay: 620ms;
+}
+.hero-delay-6 {
+  animation-delay: 760ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-fade,
+  .hero-title-line,
+  .hero-card-reveal {
+    opacity: 1;
+    animation: none;
+  }
 }
