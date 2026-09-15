@@ -13,6 +13,11 @@ export const metadata: Metadata = {
   title: "KSHOOCKY — Jastip & Forwarding Korea Terpercaya",
   description:
     "Layanan Jastip & Forwarding Korea terpercaya untuk K-POP, kosmetik, fashion, dan pengiriman kargo door-to-door ke seluruh Indonesia.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
   keywords: [
     "jastip korea",
     "forwarding korea",
