@@ -1,35 +1,51 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   BookOpen,
   ChevronDown,
-  CircleDollarSign,
   Home,
   LogOut,
   MapPin,
   Menu,
+  Receipt,
+  RotateCcw,
   Settings,
   ShoppingBag,
   Truck,
+  WalletCards,
   X,
 } from "lucide-react";
 
 const workspaceLinks = [
   { label: "Overview", href: "/user", icon: Home },
   { label: "My Orders", href: "/user/orders", icon: ShoppingBag },
-  { label: "Tracking", href: "/tracking", icon: Truck },
-  { label: "Catalog PO", href: "/catalog", icon: BookOpen },
+  { label: "My Shipments", href: "/user/shipments", icon: Truck },
+  { label: "Catalog Orders", href: "/user/catalog", icon: BookOpen },
+  { label: "Manifest Schedule", href: "/user/manifest", icon: MapPin },
 ];
 
 const accountLinks = [
+  { label: "Refund", href: "/user/refund", icon: RotateCcw },
+  { label: "Billing", href: "/user/billing", icon: Receipt },
+  { label: "My Wallet", href: "/user/wallet", icon: WalletCards },
   { label: "Address Book", href: "/user#address-book", icon: MapPin },
-  { label: "Billing / Invoice", href: "/user#billing", icon: CircleDollarSign },
   { label: "Settings", href: "/user#settings", icon: Settings },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
+function SidebarContent({
+  onNavigate,
+  pathname,
+}: {
+  onNavigate: () => void;
+  pathname: string;
+}) {
+  function isActive(href: string) {
+    return href === "/user" ? pathname === href : pathname.startsWith(href);
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-white/10 px-6 py-6">
@@ -51,12 +67,12 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
           Workspace
         </p>
         <div className="mt-3 space-y-1">
-          {workspaceLinks.map(({ label, href, icon: Icon }, index) => (
+          {workspaceLinks.map(({ label, href, icon: Icon }) => (
             <Link
               key={label}
               href={href}
               onClick={onNavigate}
-              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-colors ${index === 0 ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-colors ${isActive(href) ? "bg-[#3c8aba] text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
             >
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
               {label}
@@ -73,7 +89,7 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
               key={label}
               href={href}
               onClick={onNavigate}
-              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-colors ${isActive(href) ? "bg-[#3c8aba] text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
             >
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
               {label}
@@ -109,11 +125,12 @@ export default function UserDashboardLayout({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-[#1e293b] lg:flex">
       <aside className="hidden w-[260px] shrink-0 bg-[#0F3854] lg:fixed lg:inset-y-0 lg:left-0 lg:block">
-        <SidebarContent onNavigate={() => undefined} />
+        <SidebarContent onNavigate={() => undefined} pathname={pathname} />
       </aside>
       {isSidebarOpen && (
         <button
@@ -136,7 +153,10 @@ export default function UserDashboardLayout({
           </button>
         </div>
         <div className="h-[calc(100%-52px)]">
-          <SidebarContent onNavigate={() => setIsSidebarOpen(false)} />
+          <SidebarContent
+            onNavigate={() => setIsSidebarOpen(false)}
+            pathname={pathname}
+          />
         </div>
       </aside>
 
