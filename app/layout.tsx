@@ -45,6 +45,7 @@ export default function RootLayout({
         className={`${plusJakartaSans.className} min-h-screen flex flex-col bg-white`}
       >
         {children}
+        <Analytics />
       </body>
     </html>
   );
