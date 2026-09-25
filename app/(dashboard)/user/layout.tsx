@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   ChevronDown,
@@ -18,6 +18,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 const workspaceLinks = [
   { label: "Overview", href: "/user", icon: Home },
@@ -38,9 +39,13 @@ const accountLinks = [
 function SidebarContent({
   onNavigate,
   pathname,
+  onLogout,
+  isLoggingOut,
 }: {
   onNavigate: () => void;
   pathname: string;
+  onLogout: () => void;
+  isLoggingOut: boolean;
 }) {
   function isActive(href: string) {
     return href === "/user" ? pathname === href : pathname.startsWith(href);
@@ -110,9 +115,14 @@ function SidebarContent({
             <p className="text-xs text-slate-400">Customer</p>
           </div>
         </div>
-        <button className="mt-5 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white">
+        <button
+          type="button"
+          onClick={onLogout}
+          disabled={isLoggingOut}
+          className="mt-5 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
           <LogOut className="h-[17px] w-[17px]" strokeWidth={1.8} />
-          Logout
+          {isLoggingOut ? "Logging out..." : "Logout"}
         </button>
       </div>
     </div>
@@ -124,13 +134,79 @@ export default function UserDashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSessionReady, setIsSessionReady] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      router.replace("/login");
+      return;
+    }
+
+    const supabase = createClient();
+    let isMounted = true;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      if (!data.session) {
+        router.replace("/login");
+        return;
+      }
+      setIsSessionReady(true);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+      if (event === "SIGNED_OUT" || !session) {
+        router.replace("/login");
+        return;
+      }
+      setIsSessionReady(true);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
+  async function handleLogout() {
+    if (!isSupabaseConfigured) {
+      router.replace("/login");
+      return;
+    }
+
+    setIsLoggingOut(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      setIsLoggingOut(false);
+      return;
+    }
+
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (!isSessionReady) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-[#1e293b] lg:flex">
       <aside className="hidden w-[260px] shrink-0 bg-[#0F3854] lg:fixed lg:inset-y-0 lg:left-0 lg:block">
-        <SidebarContent onNavigate={() => undefined} pathname={pathname} />
+        <SidebarContent
+          onNavigate={() => undefined}
+          pathname={pathname}
+          onLogout={() => void handleLogout()}
+          isLoggingOut={isLoggingOut}
+        />
       </aside>
       {isSidebarOpen && (
         <button
@@ -156,6 +232,8 @@ export default function UserDashboardLayout({
           <SidebarContent
             onNavigate={() => setIsSidebarOpen(false)}
             pathname={pathname}
+            onLogout={() => void handleLogout()}
+            isLoggingOut={isLoggingOut}
           />
         </div>
       </aside>
