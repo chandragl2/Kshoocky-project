@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -9,7 +10,9 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl && supabasePublishableKey,
 );
 
-let browserClient: ReturnType<typeof createSupabaseClient> | undefined;
+let browserClient:
+  | ReturnType<typeof createSupabaseClient<Database>>
+  | undefined;
 
 export function createClient() {
   if (!supabaseUrl || !supabasePublishableKey) {
@@ -19,7 +22,10 @@ export function createClient() {
   }
 
   if (!browserClient) {
-    browserClient = createSupabaseClient(supabaseUrl, supabasePublishableKey);
+    browserClient = createSupabaseClient<Database>(
+      supabaseUrl,
+      supabasePublishableKey,
+    );
   }
 
   return browserClient;
