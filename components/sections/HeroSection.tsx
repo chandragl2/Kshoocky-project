@@ -15,33 +15,32 @@ export default function HeroSection() {
       <div className="max-w-7xl w-full flex flex-col lg:flex-row items-center gap-16 py-20">
         {/* Left: Text Content */}
         <div className="lg:w-1/2 flex flex-col">
-          {/* Live Badge */}
-          <div className="hero-fade hero-delay-1 inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white/80 text-xs font-semibold px-4 py-2 rounded-full mb-8 w-fit">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            Melayani sejak 2024
+          {/* Brand Eyebrow */}
+          <div className="hero-fade hero-delay-1 mb-6 inline-flex items-center gap-3 text-xs font-bold uppercase tracking-[0.28em] text-[#E5B869]">
+            <span className="h-px w-10 bg-[#E5B869]" />
+            ABOUT KSHOOCKY
           </div>
 
           {/* Headline */}
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold leading-[1.05] mb-6">
-            <span className="hero-title-line hero-delay-2 inline-block">
-              Jastip &
-            </span>
-            <br />
-            <span className="hero-title-line hero-delay-3 inline-block">
-              Forwarding &
-            </span>
-            <br />
-            <span className="hero-title-line hero-delay-4 inline-block text-[#E5B869]">
-              Korea.
+          <h1 className="mb-6 text-4xl font-extrabold leading-[1.05] sm:text-5xl lg:text-6xl">
+            <span className="hero-title-line hero-delay-2 inline-block text-white">
+              Annyeong, Chingudeul!
             </span>
           </h1>
 
           {/* Subheading */}
-          <p className="hero-fade hero-delay-5 text-gray-400 text-lg leading-relaxed mb-10 max-w-md">
-            Kshoocky adalah layanan Jastip &amp; Forwarding Korea terpercaya.
-            Dari pembelian K-Pop, kosmetik, fashion, hingga pengiriman kargo ke
-            pintu Anda — semuanya kami urus.
-          </p>
+          <div className="hero-fade hero-delay-4 mb-10 max-w-lg text-lg leading-relaxed text-gray-400 sm:text-xl">
+            <p>
+              Berdiri sejak akhir 2020, Kshoocky hadir buat bantu kamu
+              &quot;meluk bias&quot; lewat merch impian tanpa bikin dompet
+              nangis! Nggak cuma buat ARMY, sekarang kita siap bantu jastip
+              merch all fandom, war tiket konser, sampai jastip skincare &amp;
+              fashion dengan harga super affordable &amp; 100% trusted!
+            </p>
+            <p className="mt-6 text-xl font-bold leading-snug text-[#E5B869] sm:text-2xl">
+              Stop pusing, Kshoocky siap amankan semua wishlist-mu!
+            </p>
+          </div>
 
           {/* CTA Buttons */}
           <div className="hero-fade hero-delay-6 flex flex-wrap gap-4">
