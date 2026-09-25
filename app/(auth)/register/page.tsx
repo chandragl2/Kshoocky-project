@@ -60,10 +60,14 @@ export default function RegisterPage() {
 
     try {
       const supabase = createClient();
-      const { data, error } = await supabase.auth.signUp({
+      const signUpResult = supabase.auth.signUp({
         email: email.trim(),
         password,
       });
+      const timeout = new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error("SIGN_UP_TIMEOUT")), 10000);
+      });
+      const { data, error } = await Promise.race([signUpResult, timeout]);
 
       if (error) {
         const normalizedMessage = error.message.toLowerCase();
@@ -91,8 +95,14 @@ export default function RegisterPage() {
       setSuccessMessage(
         "Akun berhasil dibuat. Silakan cek email Anda untuk mengonfirmasi akun sebelum masuk.",
       );
-    } catch {
-      setFormError("Terjadi kesalahan saat membuat akun. Silakan coba lagi.");
+    } catch (error) {
+      if (error instanceof Error && error.message === "SIGN_UP_TIMEOUT") {
+        setFormError(
+          "Koneksi ke layanan pendaftaran terlalu lama. Periksa koneksi Anda lalu coba lagi.",
+        );
+      } else {
+        setFormError("Terjadi kesalahan saat membuat akun. Silakan coba lagi.");
+      }
     } finally {
       setIsSubmitting(false);
     }
