@@ -17,17 +17,17 @@ const VALUES = [
   {
     icon: Heart,
     title: "Dibuat untuk fans",
-    text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere, nisl a facilisis suscipit, erat justo consequat nunc.",
+    text: 'Berdiri sejak akhir 2020, Kshoocky hadir dari sesama fans yang paham banget rasanya pengen "meluk bias" lewat merchandise tanpa bikin dompet nangis! 😭',
   },
   {
     icon: Ticket,
     title: "Pengalaman tanpa drama",
-    text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur luctus, purus sed tincidunt commodo, justo arcu gravida.",
+    text: "Dulu khusus buat ARMY, sekarang Kshoocky makin level up! Kita siap bantu kalian copping merch K-Pop all fandom, war tiket konser, sampai jastip skincare & fashion hits dengan harga super affordable dan pastinya 100% trusted.",
   },
   {
     icon: Sparkles,
     title: "Detail yang berarti",
-    text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices.",
+    text: "Stop pusing! Kshoocky siap amankan semua wishlist kamu!",
   },
 ];
 
@@ -81,8 +81,8 @@ export default function AboutPage() {
                   Annyeong, Chingudeul!
                 </span>
                 Berdiri sejak akhir 2020, Kshoocky hadir dari sesama fans yang
-                paham banget rasanya pengen "meluk bias" lewat merchandise tanpa
-                bikin dompet nangis! 😭
+                paham banget rasanya pengen &quot;meluk bias&quot; lewat
+                merchandise tanpa bikin dompet nangis! 😭
               </p>
               <div className="hero-fade hero-delay-5 mt-9 flex flex-wrap gap-3">
                 <Link
@@ -208,8 +208,7 @@ export default function AboutPage() {
             Siap ikut perjalanan berikutnya?
           </h2>
           <p className="hero-fade hero-delay-3 mx-auto mt-4 max-w-xl text-sm leading-6 text-white/70">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mari mulai
-            dari satu produk favoritmu.
+            Annyeong, Chingudeul!
           </p>
           <Link
             href="/preorder"
