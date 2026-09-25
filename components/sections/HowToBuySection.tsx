@@ -1,7 +1,7 @@
 import {
   Search,
+  Heart,
   CreditCard,
-  Clock,
   PackageCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -22,13 +22,13 @@ const STEPS: Step[] = [
   },
   {
     step: "02",
-    icon: CreditCard,
+    icon: Heart,
     title: "Pick Your Wishlist",
     desc: "Klik merch favoritmu dan tentukan varian yang kamu inginkan.",
   },
   {
     step: "03",
-    icon: Clock,
+    icon: CreditCard,
     title: "Checkout & Bayar",
     desc: "Lakukan pembayaran DP/Pelunasan dengan praktis lewat sistem.",
   },
@@ -61,11 +61,8 @@ export default function HowToBuySection() {
             key={item.step}
             className="bg-white p-8 pt-10 rounded-3xl text-center shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
           >
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#0B1320] mb-4">
-              <item.icon
-                className="w-7 h-7 text-[#E5B869]"
-                strokeWidth={1.75}
-              />
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full border border-[#E5B869]/60 bg-[#F9F6E7] text-[#0F3854] shadow-[0_6px_16px_rgba(15,56,84,0.08)]">
+              <item.icon className="h-7 w-7" strokeWidth={1.6} />
             </div>
             <div className="text-xs font-extrabold text-gray-400 tracking-widest mb-2">
               {item.step}
