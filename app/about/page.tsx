@@ -69,20 +69,20 @@ export default function AboutPage() {
             <div className="max-w-3xl">
               <div className="hero-fade hero-delay-1 mb-7 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.3em] text-[#E5B869]">
                 <span className="h-px w-10 bg-[#E5B869]" />
-                Tentang KSHOOCKY
+                ABOUT KSHOOCKY
               </div>
               <h1 className="max-w-4xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-7xl lg:text-8xl">
-                <span className="hero-title-line hero-delay-2 inline-block">
-                  Your Korean
-                </span>
-                <span className="hero-title-line hero-delay-3 block text-[#E5B869]">
-                  fan journey.
+                <span className="hero-title-line hero-delay-2 inline-block text-[#E5B869]">
+                  ABOUT KSHOOCKY
                 </span>
               </h1>
               <p className="hero-fade hero-delay-4 mt-7 max-w-xl text-base leading-7 text-white/75 sm:text-lg">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Kami
-                membawa rasa seru dari Seoul ke depan pintumu, dari first teaser
-                sampai unboxing terakhir.
+                <span className="mb-3 block text-lg font-bold text-white sm:text-xl">
+                  Annyeong, Chingudeul!
+                </span>
+                Berdiri sejak akhir 2020, Kshoocky hadir dari sesama fans yang
+                paham banget rasanya pengen "meluk bias" lewat merchandise tanpa
+                bikin dompet nangis! 😭
               </p>
               <div className="hero-fade hero-delay-5 mt-9 flex flex-wrap gap-3">
                 <Link
@@ -127,20 +127,13 @@ export default function AboutPage() {
             </div>
             <div className="hero-card-reveal space-y-5 text-sm leading-7 text-[#66758b] sm:text-base">
               <p>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
-                eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
-                enim ad minim veniam, quis nostrud exercitation ullamco laboris
-                nisi ut aliquip ex ea commodo consequat.
+                Dulu khusus buat ARMY, sekarang Kshoocky makin level up! Kita
+                siap bantu kalian copping merch K-Pop all fandom, war tiket
+                konser, sampai jastip skincare &amp; fashion hits dengan harga
+                super affordable dan pastinya 100% trusted.
               </p>
-              <p>
-                Duis aute irure dolor in reprehenderit in voluptate velit esse
-                cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat
-                cupidatat non proident, sunt in culpa qui officia deserunt
-                mollit anim id est laborum.
-              </p>
-              <p>
-                Kami percaya proses belanja seharusnya terasa personal, jelas,
-                dan menyenangkan seperti menunggu teaser comeback favoritmu.
+              <p className="font-semibold text-[#0F3854]">
+                Stop pusing! Kshoocky siap amankan semua wishlist kamu!
               </p>
             </div>
           </div>
