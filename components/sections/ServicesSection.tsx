@@ -1,23 +1,31 @@
-const SERVICES = [
+import { Disc3, Lightbulb, Shirt, Ticket, type LucideIcon } from 'lucide-react';
+
+interface Service {
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+}
+
+const SERVICES: Service[] = [
   {
-    icon: '🛍️',
-    title: 'Jastip Korea',
-    desc: 'Titip beli semua kebutuhanmu dari Korea tanpa batasan pembelanjaan.',
+    icon: Disc3,
+    title: 'K-Pop Album',
+    desc: 'Amankan album favorit lengkap dengan POB & benefit seru dari kshoocky! Counting ke chart resmi Korea, 100% original.',
   },
   {
-    icon: '🏢',
-    title: 'Warehouse Korea',
-    desc: 'Gudang transit beralamat di Korea siap menampung barang pesananmu.',
+    icon: Lightbulb,
+    title: 'Official Merch',
+    desc: 'Dari lightstick, photocard, dan collab brand idol bisa kita bantu war!',
   },
   {
-    icon: '✈️',
-    title: 'Forwarding Korea - ID',
-    desc: 'Pengiriman internasional via kargo EMS atau jalur udara yang cepat.',
+    icon: Shirt,
+    title: 'Fashion & Cosmetics',
+    desc: 'Jastip outfit hits, skincare, hingga makeup populer langsung dari Korea.',
   },
   {
-    icon: '🔍',
-    title: 'Tracking Paket',
-    desc: 'Lacak perjalanan barangmu secara real-time dan transparan.',
+    icon: Ticket,
+    title: 'Ticketing Service',
+    desc: 'Anti pusing war tiket! kshoocky siap bantuin kamu',
   },
 ];
 
@@ -34,7 +42,7 @@ export default function ServicesSection() {
           OUR SERVICES
         </span>
         <h2 className="text-4xl lg:text-5xl font-extrabold text-[#0B1320] mt-4">
-          Layanan KSHOOCKY
+          All-in-One K-Jastip for You!
         </h2>
         <p className="text-lg text-gray-600 mt-6 leading-relaxed">
           Semua kebutuhan belanja dan pengiriman dari Korea, kami bantu dalam satu
@@ -47,11 +55,16 @@ export default function ServicesSection() {
         {SERVICES.map((item) => (
           <div
             key={item.title}
-            className="bg-white p-8 lg:p-10 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            className="flex h-full min-h-[280px] flex-col rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-shadow hover:shadow-md lg:p-10"
           >
-            <div className="text-5xl mb-6" aria-hidden="true">{item.icon}</div>
-            <h3 className="text-xl lg:text-2xl font-bold text-[#0B1320] mb-3">{item.title}</h3>
-            <p className="text-base text-gray-500 leading-relaxed">{item.desc}</p>
+            <div
+              className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#E5B869]/60 bg-[#F9F6E7] text-[#0B1320]"
+              aria-hidden="true"
+            >
+              <item.icon className="h-7 w-7" strokeWidth={1.7} />
+            </div>
+            <h3 className="mb-3 text-xl font-bold text-[#0B1320] lg:text-2xl">{item.title}</h3>
+            <p className="text-base leading-relaxed text-gray-500">{item.desc}</p>
           </div>
         ))}
       </div>
