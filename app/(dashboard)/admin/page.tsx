@@ -60,7 +60,6 @@ type Product = {
   status: ProductStatus;
 };
 
-const supabase = createClient();
 const shipmentStatuses: ShipmentStatus[] = [
   "SEOUL_WH",
   "IN_TRANSIT",
@@ -143,6 +142,9 @@ function SectionCard({
 }
 
 export default function AdminPage() {
+  const [supabase] = useState(() =>
+    isSupabaseConfigured ? createClient() : null,
+  );
   const [activeTab, setActiveTab] = useState<Tab>("shipments");
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -166,9 +168,9 @@ export default function AdminPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError("");
-    if (!isSupabaseConfigured) {
+    if (!supabase) {
       setError(
-        "Supabase belum dikonfigurasi. Tambahkan NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY di environment variables.",
+        "Supabase belum dikonfigurasi. Tambahkan NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY di environment variables.",
       );
       setIsLoading(false);
       return;
@@ -199,11 +201,11 @@ export default function AdminPage() {
     setShipments((shipmentsResult.data || []) as Shipment[]);
     setProducts((productsResult.data || []) as Product[]);
     setIsLoading(false);
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     void loadData();
-    if (!isSupabaseConfigured) return;
+    if (!supabase) return;
     const channel = supabase
       .channel("admin-dashboard-live-data")
       .on(
@@ -226,7 +228,7 @@ export default function AdminPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadData]);
+  }, [loadData, supabase]);
 
   function showResult(message: string) {
     setNotice(message);
@@ -237,6 +239,7 @@ export default function AdminPage() {
   async function addShipment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!shipmentOrderId || !trackingNumber.trim()) return;
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
     setIsSaving(true);
     const { error: insertError } = await supabase.from("shipments").insert({
       order_id: shipmentOrderId,
@@ -252,6 +255,7 @@ export default function AdminPage() {
   }
 
   async function updateShipmentStatus(id: string, status: ShipmentStatus) {
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
     const { error: updateError } = await supabase
       .from("shipments")
       .update({ current_status: status, updated_at: new Date().toISOString() })
@@ -268,6 +272,7 @@ export default function AdminPage() {
   async function addShipmentLog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!logShipmentId || !logLocation.trim() || !logDescription.trim()) return;
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
     setIsSaving(true);
     const { error: insertError } = await supabase.from("shipment_logs").insert({
       shipment_id: logShipmentId,
@@ -297,6 +302,7 @@ export default function AdminPage() {
     event.preventDefault();
     if (!productTitle.trim() || !productPrice || !productCategory.trim())
       return;
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
     setIsSaving(true);
     const slug = productTitle
       .toLowerCase()
@@ -322,6 +328,7 @@ export default function AdminPage() {
   }
 
   async function updateProductStatus(id: string, status: ProductStatus) {
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
     const { error: updateError } = await supabase
       .from("products")
       .update({ status })
@@ -334,6 +341,7 @@ export default function AdminPage() {
   }
 
   async function updatePaymentStatus(id: string, paymentStatus: PaymentStatus) {
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
     const { error: updateError } = await supabase
       .from("orders")
       .update({ payment_status: paymentStatus })
