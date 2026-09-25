@@ -3,19 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import {
-  User,
-  Mail,
-  Phone,
-  Lock,
-  Eye,
-  Instagram,
-  Twitter,
-  MapPin,
-} from "lucide-react";
+import { User, Mail, Phone, Lock, Eye, EyeOff } from "lucide-react";
 
 export default function RegisterPage() {
-  const [selectedCountry, setSelectedCountry] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-200 flex flex-col items-center justify-center px-4 py-12">
@@ -49,7 +43,10 @@ export default function RegisterPage() {
         </div>
 
         {/* Form */}
-        <form className="flex flex-col gap-4">
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => event.preventDefault()}
+        >
           {/* Nama Lengkap */}
           <div>
             <label
@@ -122,19 +119,36 @@ export default function RegisterPage() {
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 id="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Masukkan kata sandi"
                 autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
               />
               <button
                 type="button"
-                aria-label="Tampilkan kata sandi"
+                aria-label={
+                  showPassword
+                    ? "Sembunyikan kata sandi"
+                    : "Tampilkan kata sandi"
+                }
+                onClick={() => setShowPassword((visible) => !visible)}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
               >
-                <Eye className="w-4 h-4" />
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
+            <p className="mt-1.5 text-xs text-gray-400">
+              Minimal 8 karakter
+              {password.length >= 8 && (
+                <span className="ml-2 font-semibold text-[#3C7B9E]">✓</span>
+              )}
+            </p>
           </div>
 
           {/* Konfirmasi Kata Sandi */}
@@ -149,215 +163,34 @@ export default function RegisterPage() {
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 id="confirm-password"
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 placeholder="Ulangi kata sandi"
                 autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
                 className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
               />
               <button
                 type="button"
-                aria-label="Tampilkan konfirmasi kata sandi"
+                aria-label={
+                  showConfirmPassword
+                    ? "Sembunyikan konfirmasi kata sandi"
+                    : "Tampilkan konfirmasi kata sandi"
+                }
+                onClick={() => setShowConfirmPassword((visible) => !visible)}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
               >
-                <Eye className="w-4 h-4" />
+                {showConfirmPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
-          </div>
-
-          {/* Sosial Media (Opsional) */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="instagram"
-                className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-              >
-                Instagram{" "}
-                <span className="text-gray-400 font-normal">(opsional)</span>
-              </label>
-              <div className="relative">
-                <Instagram className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  id="instagram"
-                  type="text"
-                  placeholder="user_name"
-                  className="w-full pl-10 pr-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                />
-              </div>
-            </div>
-            <div>
-              <label
-                htmlFor="twitter"
-                className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-              >
-                X / Twitter{" "}
-                <span className="text-gray-400 font-normal">(opsional)</span>
-              </label>
-              <div className="relative">
-                <Twitter className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  id="twitter"
-                  type="text"
-                  placeholder="user_name"
-                  className="w-full pl-10 pr-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Catatan sosial */}
-          <p className="text-xs text-gray-400 -mt-2">
-            * Setidaknya satu dari Instagram atau X/Twitter wajib diisi untuk
-            validasi.
-          </p>
-
-          {/* Alamat Pengiriman */}
-          <div className="border-t border-gray-100 pt-5 mt-1">
-            <div className="flex items-center gap-2 mb-4">
-              <MapPin className="w-4 h-4 text-[#E5B869]" />
-              <h3 className="text-sm font-bold text-[#0B1320]">
-                Alamat Pengiriman
-              </h3>
-            </div>
-
-            <label
-              htmlFor="country"
-              className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-            >
-              Negara <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="country"
-              value={selectedCountry}
-              onChange={(event) => setSelectedCountry(event.target.value)}
-              className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-[#0B1320] focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-              required
-            >
-              <option value="">— Pilih Negara —</option>
-              <option value="Indonesia">Indonesia</option>
-              <option value="Korea Selatan">Korea Selatan</option>
-            </select>
-
-            {selectedCountry && (
-              <div className="flex flex-col gap-4 mt-4">
-                <div>
-                  <label
-                    htmlFor="address"
-                    className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-                  >
-                    Alamat (Jalan &amp; Nomor){" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="address"
-                    type="text"
-                    placeholder="Contoh: Jl. Merdeka No. 10"
-                    autoComplete="street-address"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="province"
-                    className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-                  >
-                    Provinsi <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="province"
-                    defaultValue=""
-                    className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                    required
-                  >
-                    <option value="">— Pilih Provinsi —</option>
-                    <option value="Jawa Barat">Jawa Barat</option>
-                    <option value="DKI Jakarta">DKI Jakarta</option>
-                    <option value="Jawa Tengah">Jawa Tengah</option>
-                    <option value="Jawa Timur">Jawa Timur</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="city"
-                    className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-                  >
-                    Kota / Kabupaten <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="city"
-                    type="text"
-                    placeholder="Contoh: Jakarta Selatan"
-                    autoComplete="address-level2"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="district"
-                    className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-                  >
-                    Kecamatan <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="district"
-                    type="text"
-                    placeholder="Contoh: Kebayoran Baru"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="subdistrict"
-                    className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-                  >
-                    Kelurahan <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="subdistrict"
-                    type="text"
-                    placeholder="Contoh: Senayan"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="postal-code"
-                    className="block text-sm font-semibold text-[#0B1320] mb-1.5"
-                  >
-                    Kode Pos <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="postal-code"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Contoh: 10110"
-                    autoComplete="postal-code"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
-                    required
-                  />
-                </div>
-
-                <label className="flex items-start gap-2.5 rounded-xl border border-[#F3D98B] bg-[#FFFBEA] px-3 py-3 text-xs text-gray-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 mt-0.5 rounded accent-[#3C7B9E] flex-shrink-0"
-                    required
-                  />
-                  <span>
-                    Saya menyatakan alamat di atas benar. Saya memahami bahwa
-                    data alamat akan digunakan untuk keperluan pengiriman dan
-                    verifikasi identitas.
-                  </span>
-                </label>
-              </div>
+            {confirmPassword && confirmPassword === password && (
+              <p className="mt-1.5 text-xs font-semibold text-[#3C7B9E]">
+                ✓ Kata sandi cocok
+              </p>
             )}
           </div>
 
