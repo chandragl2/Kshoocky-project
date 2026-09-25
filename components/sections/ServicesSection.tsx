@@ -1,4 +1,4 @@
-import { Disc3, Lightbulb, Shirt, Ticket, type LucideIcon } from 'lucide-react';
+import { Disc3, Lightbulb, Shirt, Ticket, type LucideIcon } from "lucide-react";
 
 interface Service {
   icon: LucideIcon;
@@ -9,23 +9,23 @@ interface Service {
 const SERVICES: Service[] = [
   {
     icon: Disc3,
-    title: 'K-Pop Album',
-    desc: 'Amankan album favorit lengkap dengan POB & benefit seru dari kshoocky! Counting ke chart resmi Korea, 100% original.',
+    title: "K-Pop Album",
+    desc: "Amankan album favorit lengkap dengan POB & benefit seru dari kshoocky! Counting ke chart resmi Korea, 100% original.",
   },
   {
     icon: Lightbulb,
-    title: 'Official Merch',
-    desc: 'Dari lightstick, photocard, dan collab brand idol bisa kita bantu war!',
+    title: "Official Merch",
+    desc: "Dari lightstick, photocard, dan collab brand idol bisa kita bantu war!",
   },
   {
     icon: Shirt,
-    title: 'Fashion & Cosmetics',
-    desc: 'Jastip outfit hits, skincare, hingga makeup populer langsung dari Korea.',
+    title: "Fashion & Cosmetics",
+    desc: "Jastip outfit hits, skincare, hingga makeup populer langsung dari Korea.",
   },
   {
     icon: Ticket,
-    title: 'Ticketing Service',
-    desc: 'Anti pusing war tiket! kshoocky siap bantuin kamu',
+    title: "Ticketing Service",
+    desc: "Anti pusing war tiket! kshoocky siap bantuin kamu",
   },
 ];
 
@@ -45,8 +45,8 @@ export default function ServicesSection() {
           All-in-One K-Jastip for You!
         </h2>
         <p className="text-lg text-gray-600 mt-6 leading-relaxed">
-          Semua kebutuhan belanja dan pengiriman dari Korea, kami bantu dalam satu
-          layanan yang praktis, aman, dan transparan.
+          Semua kebutuhan belanja dan pengiriman dari Korea, kami bantu dalam
+          satu layanan yang praktis, aman, dan transparan.
         </p>
       </div>
 
@@ -63,8 +63,12 @@ export default function ServicesSection() {
             >
               <item.icon className="h-7 w-7" strokeWidth={1.7} />
             </div>
-            <h3 className="mb-3 text-xl font-bold text-[#0B1320] lg:text-2xl">{item.title}</h3>
-            <p className="text-base leading-relaxed text-gray-500">{item.desc}</p>
+            <h3 className="mb-3 text-xl font-bold text-[#0B1320] lg:text-2xl">
+              {item.title}
+            </h3>
+            <p className="text-base leading-relaxed text-gray-500">
+              {item.desc}
+            </p>
           </div>
         ))}
       </div>
