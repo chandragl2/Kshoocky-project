@@ -77,7 +77,7 @@ export default function AboutPage() {
                 </span>
               </h1>
               <p className="hero-fade hero-delay-4 mt-7 max-w-xl text-base leading-7 text-white/75 sm:text-lg">
-                <span className="mb-3 block text-lg font-bold text-white sm:text-xl">
+                <span className="mb-4 block text-xl font-semibold text-[#E5B869] sm:text-2xl">
                   Annyeong, Chingudeul!
                 </span>
                 Berdiri sejak akhir 2020, Kshoocky hadir dari sesama fans yang
@@ -125,14 +125,20 @@ export default function AboutPage() {
                 Seoul <span className="text-[#b86645]">✦</span> Bandung
               </div>
             </div>
-            <div className="hero-card-reveal space-y-5 text-sm leading-7 text-[#66758b] sm:text-base">
-              <p>
+            <div
+              className="hero-card-reveal max-w-2xl space-y-8 text-lg text-[#66758b] sm:text-xl lg:text-[1.65rem]"
+              style={{ lineHeight: 1.6 }}
+            >
+              <p className="max-w-2xl">
                 Dulu khusus buat ARMY, sekarang Kshoocky makin level up! Kita
                 siap bantu kalian copping merch K-Pop all fandom, war tiket
                 konser, sampai jastip skincare &amp; fashion hits dengan harga
                 super affordable dan pastinya 100% trusted.
               </p>
-              <p className="font-semibold text-[#0F3854]">
+              <p
+                className="max-w-xl text-xl font-bold text-[#0F3854] sm:text-2xl lg:text-[1.75rem]"
+                style={{ lineHeight: 1.35 }}
+              >
                 Stop pusing! Kshoocky siap amankan semua wishlist kamu!
               </p>
             </div>
