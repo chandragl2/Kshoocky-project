@@ -43,7 +43,10 @@ export default function TestimonialCard() {
 
   return (
     <div className="hero-card-reveal relative w-full max-w-[40rem] rounded-2xl border border-white/10 bg-[#162032]/95 p-5 shadow-2xl shadow-black/25 sm:p-7">
-      <div className="absolute -right-1 -top-7 select-none text-5xl drop-shadow-lg sm:-right-2 sm:-top-9 sm:text-6xl" aria-hidden="true">
+      <div
+        className="absolute -right-1 -top-7 select-none text-5xl drop-shadow-lg sm:-right-2 sm:-top-9 sm:text-6xl"
+        aria-hidden="true"
+      >
         🐱
       </div>
 
@@ -66,7 +69,9 @@ export default function TestimonialCard() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <p className="font-bold text-white sm:text-lg">{testimonial.name}</p>
+              <p className="font-bold text-white sm:text-lg">
+                {testimonial.name}
+              </p>
               <div
                 className="flex gap-0.5 text-[#E5B869]"
                 aria-label={`${RATING} dari 5 bintang`}
