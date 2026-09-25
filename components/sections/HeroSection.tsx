@@ -1,47 +1,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
-
-const STATS = [
-  { label: "Total Pesanan", value: "5,820+", color: "text-white" },
-  { label: "Pelanggan", value: "1,240+", color: "text-[#E5B869]" },
-  { label: "Terkirim", value: "4,100+", color: "text-[#3C7B9E]" },
-  { label: "K-Pop Item", value: "2,450+", color: "text-[#E5B869]" },
-];
-
-function DashboardCard() {
-  return (
-    <div className="hero-card-reveal w-full max-w-md bg-[#162032] rounded-2xl p-6 border border-white/10 shadow-2xl">
-      {/* Card Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="bg-[#E5B869] text-[#0B1320] font-extrabold text-xs px-2 py-1.5 rounded-lg">
-          KS
-        </div>
-        <div>
-          <p className="font-bold text-white text-sm">KSHOOCKY Dashboard</p>
-          <p className="text-xs text-gray-400">Statistik Langsung</p>
-        </div>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        {STATS.map((stat) => (
-          <div key={stat.label} className="bg-[#1e2d42] rounded-xl p-4">
-            <p className="text-xs text-gray-400 mb-1">{stat.label}</p>
-            <p className={`text-2xl font-extrabold ${stat.color}`}>
-              {stat.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Status Bar */}
-      <div className="bg-[#1e2d42] rounded-xl px-4 py-3 flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-green-400" />
-        <p className="text-sm text-gray-300 font-medium">Sistem Normal</p>
-      </div>
-    </div>
-  );
-}
+import TestimonialCard from "./TestimonialCard";
 
 export default function HeroSection() {
   return (
@@ -102,16 +61,9 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* Right: Dashboard Card */}
+        {/* Right: Testimonial Card */}
         <div className="lg:w-1/2 w-full flex justify-center relative">
-          {/* Floating Mascot */}
-          <div
-            className="absolute -top-8 right-8 text-6xl select-none animate-bounce z-10"
-            aria-hidden="true"
-          >
-            🐱
-          </div>
-          <DashboardCard />
+          <TestimonialCard />
         </div>
       </div>
     </section>
