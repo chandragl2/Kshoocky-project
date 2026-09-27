@@ -16,6 +16,7 @@ import {
   Truck,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import type { ProductStatus } from "@/lib/supabase/database";
 
 type Tab = "shipments" | "products" | "orders";
 type ShipmentStatus =
@@ -25,17 +26,14 @@ type ShipmentStatus =
   | "JAKARTA_WH"
   | "DELIVERED";
 type PaymentStatus = "UNPAID" | "DP" | "PAID";
-type ProductStatus = "PRE_ORDER" | "OUT_OF_STOCK";
 
 type Order = {
   id: string;
   order_number: string;
-  item_name?: string | null;
-  quantity?: number | null;
   total_price?: number | null;
   payment_status?: PaymentStatus | null;
   profiles?: { full_name?: string | null } | null;
-  products?: { title?: string | null } | null;
+  order_items?: { product_title: string; quantity: number }[];
 };
 
 type Shipment = {
@@ -68,7 +66,7 @@ const shipmentStatuses: ShipmentStatus[] = [
   "DELIVERED",
 ];
 const paymentStatuses: PaymentStatus[] = ["UNPAID", "DP", "PAID"];
-const productStatuses: ProductStatus[] = ["PRE_ORDER", "OUT_OF_STOCK"];
+const productStatuses: ProductStatus[] = ["active", "inactive", "out_of_stock"];
 const tabs = [
   { id: "shipments" as const, label: "Logistik & Resi", icon: Truck },
   { id: "products" as const, label: "Katalog Pre-Order", icon: ShoppingBag },
@@ -179,7 +177,7 @@ export default function AdminPage() {
       supabase
         .from("orders")
         .select(
-          "id, order_number, item_name, quantity, total_price, payment_status, profiles:user_id(full_name), products:product_id(title)",
+          "id, order_number, total_price, payment_status, profiles:user_id(full_name), order_items(product_title, quantity)",
         )
         .order("order_number", { ascending: false }),
       supabase
@@ -279,7 +277,6 @@ export default function AdminPage() {
       status_title: logStatus,
       location: logLocation.trim(),
       description: logDescription.trim(),
-      timestamp: new Date().toISOString(),
     });
     if (!insertError) {
       await supabase
@@ -312,10 +309,13 @@ export default function AdminPage() {
     const { error: insertError } = await supabase.from("products").insert({
       title: productTitle.trim(),
       slug,
+      description: "",
       category: productCategory.trim(),
       price: Number(productPrice),
-      image_url: productImageUrl.trim() || null,
-      status: "PRE_ORDER",
+      stock: 0,
+      image_url: productImageUrl.trim(),
+      status: "active",
+      is_featured: false,
     });
     setIsSaving(false);
     if (insertError) return setError(insertError.message);
@@ -361,7 +361,7 @@ export default function AdminPage() {
       .includes(search.toLowerCase()),
   );
   const filteredOrders = orders.filter((item) =>
-    `${item.order_number} ${item.item_name || item.products?.title || ""} ${item.profiles?.full_name || ""}`
+    `${item.order_number} ${item.order_items?.map((orderItem) => orderItem.product_title).join(" ") || ""} ${item.profiles?.full_name || ""}`
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
@@ -773,14 +773,14 @@ export default function AdminPage() {
                         {displayName(order.profiles?.full_name)}
                       </td>
                       <td className="py-4 text-slate-600">
-                        {order.item_name ||
-                          order.products?.title ||
-                          "Produk tidak tersedia"}
-                        {order.quantity ? (
-                          <span className="ml-1 text-xs text-slate-400">
-                            ×{order.quantity}
-                          </span>
-                        ) : null}
+                        {order.order_items?.length
+                          ? order.order_items
+                              .map(
+                                (orderItem) =>
+                                  `${orderItem.product_title} ×${orderItem.quantity}`,
+                              )
+                              .join(", ")
+                          : "Produk tidak tersedia"}
                       </td>
                       <td className="py-4 font-bold text-[#0F3854]">
                         {formatCurrency(order.total_price)}

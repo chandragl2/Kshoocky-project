@@ -4,9 +4,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { Menu, Search, ShoppingBag, UserRound, X } from "lucide-react";
 import { useState } from "react";
+import { useCartQuantity } from "@/hooks/useCartQuantity";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const cartQuantity = useCartQuantity();
 
   function closeMenu() {
     setIsMenuOpen(false);
@@ -70,12 +72,18 @@ export default function Navbar() {
             >
               <Search className="h-5 w-5" />
             </button>
-            <button
-              aria-label="Keranjang belanja"
-              className="hover:text-[#2563eb] transition-colors"
+            <Link
+              href="/user/cart"
+              aria-label={`Keranjang belanja, ${cartQuantity} item`}
+              className="relative hover:text-[#2563eb] transition-colors"
             >
               <ShoppingBag className="h-5 w-5" />
-            </button>
+              {cartQuantity > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E5B869] px-1 text-[9px] font-extrabold text-[#0F3854]">
+                  {cartQuantity}
+                </span>
+              )}
+            </Link>
             <button
               aria-label="Akun saya"
               className="hover:text-[#2563eb] transition-colors"
@@ -104,34 +112,73 @@ export default function Navbar() {
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           className="text-[#334155] lg:hidden"
         >
-          {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          {isMenuOpen ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <Menu className="h-6 w-6" />
+          )}
         </button>
       </div>
 
       {isMenuOpen && (
         <div className="border-t border-[#eee9e4] bg-[#fffdfb] px-5 pb-5 pt-3 shadow-lg lg:hidden">
           <div className="flex flex-col gap-1 text-sm font-semibold text-[#332d2a]">
-            <Link href="/" onClick={closeMenu} className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]">
+            <Link
+              href="/user/cart"
+              onClick={closeMenu}
+              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+            >
+              Keranjang{cartQuantity > 0 ? ` (${cartQuantity})` : ""}
+            </Link>
+            <Link
+              href="/"
+              onClick={closeMenu}
+              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+            >
               Beranda
             </Link>
-            <Link href="/preorder" onClick={closeMenu} className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]">
+            <Link
+              href="/preorder"
+              onClick={closeMenu}
+              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+            >
               Pre Order
             </Link>
-            <Link href="/tracking" onClick={closeMenu} className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]">
+            <Link
+              href="/tracking"
+              onClick={closeMenu}
+              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+            >
               Pelacakan
             </Link>
-            <Link href="/catalog" onClick={closeMenu} className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]">
+            <Link
+              href="/catalog"
+              onClick={closeMenu}
+              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+            >
               Katalog
             </Link>
-            <Link href="/about" onClick={closeMenu} className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]">
+            <Link
+              href="/about"
+              onClick={closeMenu}
+              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+            >
               Tentang Kami
             </Link>
           </div>
           <div className="mt-3 flex gap-3 border-t border-[#eee9e4] pt-4">
-            <Link href="/login" onClick={closeMenu} className="flex-1 rounded-xl border border-[#dfe3e8] px-4 py-3 text-center text-sm font-bold text-[#332d2a]">
+            <Link
+              href="/login"
+              onClick={closeMenu}
+              className="flex-1 rounded-xl border border-[#dfe3e8] px-4 py-3 text-center text-sm font-bold text-[#332d2a]"
+            >
               Masuk
             </Link>
-            <Link href="/register" onClick={closeMenu} className="flex-1 rounded-xl bg-[#0F3854] px-4 py-3 text-center text-sm font-bold text-white">
+            <Link
+              href="/register"
+              onClick={closeMenu}
+              className="flex-1 rounded-xl bg-[#0F3854] px-4 py-3 text-center text-sm font-bold text-white"
+            >
               Daftar Sekarang
             </Link>
           </div>

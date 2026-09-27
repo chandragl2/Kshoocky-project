@@ -1,3 +1,3 @@
-import { PreorderPage } from "../catalog/page";
+import PreorderCatalog from "@/components/PreorderCatalog";
 
-export default PreorderPage;
+export default PreorderCatalog;

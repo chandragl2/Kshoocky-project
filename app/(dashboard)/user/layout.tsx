@@ -14,14 +14,18 @@ import {
   RotateCcw,
   Settings,
   ShoppingBag,
+  ShoppingCart,
   Truck,
+  UserRound,
   WalletCards,
   X,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { useCartQuantity } from "@/hooks/useCartQuantity";
 
 const workspaceLinks = [
   { label: "Overview", href: "/user", icon: Home },
+  { label: "Keranjang", href: "/user/cart", icon: ShoppingCart },
   { label: "My Orders", href: "/user/orders", icon: ShoppingBag },
   { label: "My Shipments", href: "/user/shipments", icon: Truck },
   { label: "Catalog Orders", href: "/user/catalog", icon: BookOpen },
@@ -32,7 +36,8 @@ const accountLinks = [
   { label: "Refund", href: "/user/refund", icon: RotateCcw },
   { label: "Billing", href: "/user/billing", icon: Receipt },
   { label: "My Wallet", href: "/user/wallet", icon: WalletCards },
-  { label: "Address Book", href: "/user#address-book", icon: MapPin },
+  { label: "My Profile", href: "/user/profile", icon: UserRound },
+  { label: "Address Book", href: "/user/addresses", icon: MapPin },
   { label: "Settings", href: "/user#settings", icon: Settings },
 ];
 
@@ -41,11 +46,13 @@ function SidebarContent({
   pathname,
   onLogout,
   isLoggingOut,
+  cartQuantity,
 }: {
   onNavigate: () => void;
   pathname: string;
   onLogout: () => void;
   isLoggingOut: boolean;
+  cartQuantity: number;
 }) {
   function isActive(href: string) {
     return href === "/user" ? pathname === href : pathname.startsWith(href);
@@ -80,7 +87,12 @@ function SidebarContent({
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-colors ${isActive(href) ? "bg-[#3c8aba] text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
             >
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {href === "/user/cart" && cartQuantity > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E5B869] px-1.5 text-[10px] font-extrabold text-[#0F3854]">
+                  {cartQuantity}
+                </span>
+              )}
             </Link>
           ))}
         </div>
@@ -138,6 +150,7 @@ export default function UserDashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSessionReady, setIsSessionReady] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const cartQuantity = useCartQuantity();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -206,6 +219,7 @@ export default function UserDashboardLayout({
           pathname={pathname}
           onLogout={() => void handleLogout()}
           isLoggingOut={isLoggingOut}
+          cartQuantity={cartQuantity}
         />
       </aside>
       {isSidebarOpen && (
@@ -234,6 +248,7 @@ export default function UserDashboardLayout({
             pathname={pathname}
             onLogout={() => void handleLogout()}
             isLoggingOut={isLoggingOut}
+            cartQuantity={cartQuantity}
           />
         </div>
       </aside>
