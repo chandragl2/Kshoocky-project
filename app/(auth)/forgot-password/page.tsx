@@ -33,9 +33,12 @@ export default function ForgotPasswordPage() {
     let timeoutId: number | undefined;
 
     try {
-      const request = createClient().auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+      const request = createClient().auth.resetPasswordForEmail(
+        normalizedEmail,
+        {
+          redirectTo: `${window.location.origin}/reset-password`,
+        },
+      );
       const timeout = new Promise<never>((_, reject) => {
         timeoutId = window.setTimeout(
           () => reject(new Error("RESET_EMAIL_TIMEOUT")),
@@ -45,9 +48,7 @@ export default function ForgotPasswordPage() {
       const { error } = await Promise.race([request, timeout]);
 
       if (error) {
-        setFormError(
-          "Gagal mengirim link reset password. Silakan coba lagi.",
-        );
+        setFormError("Gagal mengirim link reset password. Silakan coba lagi.");
         return;
       }
 
@@ -95,8 +96,8 @@ export default function ForgotPasswordPage() {
             aria-live="polite"
           >
             <p>
-              Link reset password sudah dikirim ke email kamu. Silakan cek
-              inbox dan folder spam.
+              Link reset password sudah dikirim ke email kamu. Silakan cek inbox
+              dan folder spam.
             </p>
             <p className="mt-2 font-semibold">{sentEmail}</p>
             <Link
@@ -166,7 +167,10 @@ export default function ForgotPasswordPage() {
       </div>
 
       <div className="flex gap-6 mt-8 text-xs text-gray-400">
-        <Link href="#kebijakan" className="hover:text-gray-600 transition-colors">
+        <Link
+          href="#kebijakan"
+          className="hover:text-gray-600 transition-colors"
+        >
           Kebijakan Privasi
         </Link>
         <Link href="#syarat" className="hover:text-gray-600 transition-colors">

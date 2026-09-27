@@ -139,7 +139,9 @@ export default function ResetPasswordPage() {
             role="status"
             aria-live="polite"
           >
-            <h2 className="text-xl font-extrabold">Password berhasil diperbarui.</h2>
+            <h2 className="text-xl font-extrabold">
+              Password berhasil diperbarui.
+            </h2>
             <p className="mt-2 text-gray-600">
               Silakan login menggunakan password baru Anda.
             </p>
@@ -189,7 +191,9 @@ export default function ResetPasswordPage() {
                   <button
                     type="button"
                     aria-label={
-                      showPassword ? "Sembunyikan password" : "Tampilkan password"
+                      showPassword
+                        ? "Sembunyikan password"
+                        : "Tampilkan password"
                     }
                     onClick={() => setShowPassword((visible) => !visible)}
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3C7B9E]"
@@ -267,7 +271,10 @@ export default function ResetPasswordPage() {
       </div>
 
       <div className="flex gap-6 mt-8 text-xs text-gray-400">
-        <Link href="#kebijakan" className="hover:text-gray-600 transition-colors">
+        <Link
+          href="#kebijakan"
+          className="hover:text-gray-600 transition-colors"
+        >
           Kebijakan Privasi
         </Link>
         <Link href="#syarat" className="hover:text-gray-600 transition-colors">
