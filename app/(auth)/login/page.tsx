@@ -144,7 +144,7 @@ export default function LoginPage() {
                 href="/forgot-password"
                 className="text-xs text-[#3C7B9E] hover:text-[#2f627d] font-medium transition-colors"
               >
-                Lupa kata sandi?
+                Lupa Password?
               </Link>
             </div>
             <div className="relative">
