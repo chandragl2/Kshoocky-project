@@ -30,7 +30,17 @@ export function useProducts(status?: ProductStatus) {
         const { data, error } = status
           ? await productsQuery.eq("status", status)
           : await productsQuery;
-        if (error) throw error;
+        if (error) {
+          if (process.env.NODE_ENV === "development") {
+            console.error("[Catalog] Supabase products query failed", {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            });
+          }
+          throw error;
+        }
         if (isMounted) setProducts(data ?? []);
       } catch {
         if (isMounted) setLoadError(true);
