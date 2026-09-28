@@ -1,37 +1,42 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   Check,
   ChevronDown,
+  CalendarDays,
   CircleDollarSign,
   ClipboardList,
+  ImagePlus,
   Loader2,
   Package,
   Plus,
   RefreshCw,
   Search,
   ShoppingBag,
+  Star,
   Truck,
+  X,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import type { ProductStatus } from "@/lib/supabase/database";
+import type { Database, ProductStatus } from "@/lib/supabase/database";
+import PreorderManager from "@/components/admin/PreorderManager";
 
-type Tab = "shipments" | "products" | "orders";
+type Tab = "shipments" | "products" | "orders" | "preorder";
 type ShipmentStatus =
   | "SEOUL_WH"
   | "IN_TRANSIT"
   | "CUSTOMS"
   | "JAKARTA_WH"
   | "DELIVERED";
-type PaymentStatus = "UNPAID" | "DP" | "PAID";
-
 type Order = {
   id: string;
   order_number: string;
   total_price?: number | null;
-  payment_status?: PaymentStatus | null;
+  payment_status?: string | null;
   profiles?: { full_name?: string | null } | null;
   order_items?: { product_title: string; quantity: number }[];
 };
@@ -48,15 +53,8 @@ type Shipment = {
   } | null;
 };
 
-type Product = {
-  id: string;
-  title: string;
-  slug?: string | null;
-  category?: string | null;
-  price: number;
-  image_url?: string | null;
-  status: ProductStatus;
-};
+type Product = Database["public"]["Tables"]["products"]["Row"];
+type ProductImage = Database["public"]["Tables"]["product_images"]["Row"];
 
 const shipmentStatuses: ShipmentStatus[] = [
   "SEOUL_WH",
@@ -65,8 +63,15 @@ const shipmentStatuses: ShipmentStatus[] = [
   "JAKARTA_WH",
   "DELIVERED",
 ];
-const paymentStatuses: PaymentStatus[] = ["UNPAID", "DP", "PAID"];
 const productStatuses: ProductStatus[] = ["active", "inactive", "out_of_stock"];
+const productImageBucket = "product-images";
+const allowedProductImageTypes: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+const maxProductImageSize = 5 * 1024 * 1024;
+const maxProductImages = 5;
 const tabs = [
   { id: "shipments" as const, label: "Logistik & Resi", icon: Truck },
   { id: "products" as const, label: "Katalog Pre-Order", icon: ShoppingBag },
@@ -75,6 +80,7 @@ const tabs = [
     label: "Pembayaran & Order",
     icon: CircleDollarSign,
   },
+  { id: "preorder" as const, label: "Event Preorder", icon: CalendarDays },
 ];
 
 function formatCurrency(value: number | null | undefined) {
@@ -93,16 +99,31 @@ function statusLabel(status: string) {
   return status.replaceAll("_", " ");
 }
 
+function paymentStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    pending: "Menunggu Pembayaran",
+    paid: "Dibayar",
+    failed: "Gagal",
+    refunded: "Refund",
+    UNPAID: "Belum Dibayar",
+    DP: "Dibayar Sebagian",
+    PAID: "Dibayar",
+  };
+  return status ? (labels[status] ?? statusLabel(status)) : "Tidak tersedia";
+}
+
 function Select({
   value,
   onChange,
   children,
   ariaLabel,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   children: React.ReactNode;
   ariaLabel: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="relative">
@@ -110,6 +131,7 @@ function Select({
         aria-label={ariaLabel}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
         className="w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 pr-9 text-sm font-semibold text-[#0F3854] outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
       >
         {children}
@@ -139,6 +161,100 @@ function SectionCard({
   );
 }
 
+class DuplicateProductSlugError extends Error {
+  constructor() {
+    super("duplicate-product-slug");
+    this.name = "DuplicateProductSlugError";
+  }
+}
+
+class ProductImagesUploadError extends Error {
+  constructor(
+    public readonly cleanupFailed: boolean,
+    public readonly reason: "limit" | "upload" = "upload",
+  ) {
+    super("product-images-upload-failed");
+    this.name = "ProductImagesUploadError";
+  }
+}
+
+function productSlugBase(title: string) {
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return slug || "produk";
+}
+
+async function insertProductWithUniqueSlug(
+  client: ReturnType<typeof createClient>,
+  product: Omit<Database["public"]["Tables"]["products"]["Insert"], "slug">,
+  title: string,
+) {
+  const baseSlug = productSlugBase(title);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    const { data, error } = await client
+      .from("products")
+      .insert({ ...product, slug })
+      .select("id")
+      .single();
+    if (!error) return data.id;
+    if (error.code !== "23505") throw error;
+  }
+  throw new DuplicateProductSlugError();
+}
+
+function getProductStoragePath(
+  client: ReturnType<typeof createClient>,
+  productId: string,
+  imageUrl: string,
+) {
+  try {
+    const bucketRootUrl = new URL(
+      client.storage.from(productImageBucket).getPublicUrl("").data.publicUrl,
+    );
+    const image = new URL(imageUrl);
+    const rootPath = bucketRootUrl.pathname.endsWith("/")
+      ? bucketRootUrl.pathname
+      : `${bucketRootUrl.pathname}/`;
+    if (
+      image.origin !== bucketRootUrl.origin ||
+      !image.pathname.startsWith(rootPath)
+    ) {
+      return null;
+    }
+    const path = decodeURIComponent(image.pathname.slice(rootPath.length));
+    if (
+      !path.startsWith(`products/${productId}/`) ||
+      path.split("/").some((segment) => segment === "..")
+    ) {
+      return null;
+    }
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyAdmin(client: ReturnType<typeof createClient>) {
+  const {
+    data: { user },
+    error: authError,
+  } = await client.auth.getUser();
+  if (authError || !user) return false;
+
+  const { data: profile, error: profileError } = await client
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  return profile?.role === "admin";
+}
+
 export default function AdminPage() {
   const [supabase] = useState(() =>
     isSupabaseConfigured ? createClient() : null,
@@ -147,8 +263,17 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [selectedProductFiles, setSelectedProductFiles] = useState<File[]>([]);
+  const [productPreviewUrls, setProductPreviewUrls] = useState<string[]>([]);
+  const [productImageInputKey, setProductImageInputKey] = useState(0);
+  const [busyProductImageId, setBusyProductImageId] = useState<string | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
@@ -159,46 +284,116 @@ export default function AdminPage() {
   const [logLocation, setLogLocation] = useState("");
   const [logDescription, setLogDescription] = useState("");
   const [productTitle, setProductTitle] = useState("");
+  const [productDescription, setProductDescription] = useState("");
   const [productPrice, setProductPrice] = useState("");
+  const [productStock, setProductStock] = useState("0");
   const [productCategory, setProductCategory] = useState("");
   const [productImageUrl, setProductImageUrl] = useState("");
+  const [productStatus, setProductStatus] = useState<ProductStatus>("active");
+  const [productIsFeatured, setProductIsFeatured] = useState(false);
+  const [isCatalog, setIsCatalog] = useState(true);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError("");
     if (!supabase) {
+      setIsAdmin(false);
       setError(
         "Supabase belum dikonfigurasi. Tambahkan NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY di environment variables.",
       );
       setIsLoading(false);
       return;
     }
-    const [ordersResult, shipmentsResult, productsResult] = await Promise.all([
-      supabase
-        .from("orders")
-        .select(
-          "id, order_number, total_price, payment_status, profiles:user_id(full_name), order_items(product_title, quantity)",
-        )
-        .order("order_number", { ascending: false }),
-      supabase
-        .from("shipments")
-        .select(
-          "id, order_id, tracking_number, current_status, updated_at, orders(order_number, profiles:user_id(full_name))",
-        )
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("products")
-        .select("id, title, slug, category, price, image_url, status")
-        .order("title"),
-    ]);
+    try {
+      const admin = await verifyAdmin(supabase);
+      setIsAdmin(admin);
+      if (!admin) {
+        setOrders([]);
+        setShipments([]);
+        setProducts([]);
+        return;
+      }
 
-    const firstError =
-      ordersResult.error || shipmentsResult.error || productsResult.error;
-    if (firstError) setError(firstError.message);
-    setOrders((ordersResult.data || []) as Order[]);
-    setShipments((shipmentsResult.data || []) as Shipment[]);
-    setProducts((productsResult.data || []) as Product[]);
-    setIsLoading(false);
+      const [ordersResult, shipmentsResult, productsResult] = await Promise.all(
+        [
+          supabase
+            .from("orders")
+            .select(
+              "id, order_number, total_price, payment_status, profiles:user_id(full_name), order_items(product_title, quantity)",
+            )
+            .order("order_number", { ascending: false }),
+          supabase
+            .from("shipments")
+            .select(
+              "id, order_id, tracking_number, current_status, updated_at, orders(order_number, profiles:user_id(full_name))",
+            )
+            .order("updated_at", { ascending: false }),
+          supabase.from("products").select("*").order("title"),
+        ],
+      );
+
+      const firstError =
+        ordersResult.error || shipmentsResult.error || productsResult.error;
+      if (firstError) setError(firstError.message);
+      setOrders((ordersResult.data || []) as Order[]);
+      setShipments((shipmentsResult.data || []) as Shipment[]);
+      const loadedProducts = productsResult.error
+        ? []
+        : (productsResult.data ?? []);
+      setProducts(loadedProducts);
+
+      if (productsResult.error || loadedProducts.length === 0) {
+        setProductImages([]);
+      } else {
+        const { data: imageRows, error: imagesError } = await supabase
+          .from("product_images")
+          .select("*")
+          .in(
+            "product_id",
+            loadedProducts.map((product) => product.id),
+          )
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true });
+        if (imagesError) {
+          setProductImages([]);
+          setError("Galeri foto produk gagal dimuat.");
+        } else {
+          const loadedImages = imageRows ?? [];
+          const imageGroups = new Map<string, ProductImage[]>();
+          for (const image of loadedImages) {
+            const group = imageGroups.get(image.product_id) ?? [];
+            group.push(image);
+            imageGroups.set(image.product_id, group);
+          }
+
+          const primaryFallbackIds = new Set<string>();
+          for (const group of Array.from(imageGroups.values())) {
+            if (!group.some((image) => image.is_primary) && group[0]) {
+              const { error: primaryError } = await supabase
+                .from("product_images")
+                .update({ is_primary: true })
+                .eq("product_id", group[0].product_id)
+                .eq("id", group[0].id);
+              if (!primaryError) primaryFallbackIds.add(group[0].id);
+            }
+          }
+
+          setProductImages(
+            loadedImages.map((image) =>
+              primaryFallbackIds.has(image.id)
+                ? { ...image, is_primary: true }
+                : image,
+            ),
+          );
+        }
+      }
+    } catch {
+      setIsAdmin(false);
+      setError("Data admin gagal dimuat. Silakan coba lagi.");
+    } finally {
+      setIsLoading(false);
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -221,12 +416,25 @@ export default function AdminPage() {
         { event: "*", schema: "public", table: "products" },
         () => void loadData(),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "product_images" },
+        () => void loadData(),
+      )
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
   }, [loadData, supabase]);
+
+  useEffect(() => {
+    const previewUrls = selectedProductFiles.map((file) =>
+      URL.createObjectURL(file),
+    );
+    setProductPreviewUrls(previewUrls);
+    return () => previewUrls.forEach((url) => URL.revokeObjectURL(url));
+  }, [selectedProductFiles]);
 
   function showResult(message: string) {
     setNotice(message);
@@ -239,32 +447,58 @@ export default function AdminPage() {
     if (!shipmentOrderId || !trackingNumber.trim()) return;
     if (!supabase) return setError("Supabase belum dikonfigurasi.");
     setIsSaving(true);
-    const { error: insertError } = await supabase.from("shipments").insert({
-      order_id: shipmentOrderId,
-      tracking_number: trackingNumber.trim(),
-      current_status: "SEOUL_WH",
-    });
-    setIsSaving(false);
-    if (insertError) return setError(insertError.message);
-    setShipmentOrderId("");
-    setTrackingNumber("");
-    showResult("Resi baru berhasil ditambahkan.");
-    await loadData();
+    setError("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      const { error: insertError } = await supabase.from("shipments").insert({
+        order_id: shipmentOrderId,
+        tracking_number: trackingNumber.trim(),
+        current_status: "SEOUL_WH",
+      });
+      if (insertError) throw insertError;
+      setShipmentOrderId("");
+      setTrackingNumber("");
+      showResult("Resi baru berhasil ditambahkan.");
+      await loadData();
+    } catch {
+      setError("Resi gagal ditambahkan. Silakan coba lagi.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function updateShipmentStatus(id: string, status: ShipmentStatus) {
     if (!supabase) return setError("Supabase belum dikonfigurasi.");
-    const { error: updateError } = await supabase
-      .from("shipments")
-      .update({ current_status: status, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (updateError) return setError(updateError.message);
-    setShipments((items) =>
-      items.map((item) =>
-        item.id === id ? { ...item, current_status: status } : item,
-      ),
-    );
-    showResult("Status rute berhasil diperbarui.");
+    setError("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      const { error: updateError } = await supabase
+        .from("shipments")
+        .update({
+          current_status: status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (updateError) throw updateError;
+      setShipments((items) =>
+        items.map((item) =>
+          item.id === id ? { ...item, current_status: status } : item,
+        ),
+      );
+      showResult("Status rute berhasil diperbarui.");
+    } catch {
+      setError("Status rute gagal diperbarui. Silakan coba lagi.");
+    }
   }
 
   async function addShipmentLog(event: FormEvent<HTMLFormElement>) {
@@ -272,87 +506,595 @@ export default function AdminPage() {
     if (!logShipmentId || !logLocation.trim() || !logDescription.trim()) return;
     if (!supabase) return setError("Supabase belum dikonfigurasi.");
     setIsSaving(true);
-    const { error: insertError } = await supabase.from("shipment_logs").insert({
-      shipment_id: logShipmentId,
-      status_title: logStatus,
-      location: logLocation.trim(),
-      description: logDescription.trim(),
-    });
-    if (!insertError) {
-      await supabase
+    setError("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      const { error: insertError } = await supabase
+        .from("shipment_logs")
+        .insert({
+          shipment_id: logShipmentId,
+          status_title: logStatus,
+          location: logLocation.trim(),
+          description: logDescription.trim(),
+        });
+      if (insertError) throw insertError;
+      const { error: shipmentError } = await supabase
         .from("shipments")
         .update({
           current_status: logStatus,
           updated_at: new Date().toISOString(),
         })
         .eq("id", logShipmentId);
+      if (shipmentError) throw shipmentError;
+      setLogLocation("");
+      setLogDescription("");
+      showResult("Log perjalanan berhasil ditambahkan.");
+      await loadData();
+    } catch {
+      setError("Log perjalanan gagal ditambahkan. Silakan coba lagi.");
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
-    if (insertError) return setError(insertError.message);
-    setLogLocation("");
-    setLogDescription("");
-    showResult("Log perjalanan berhasil ditambahkan.");
-    await loadData();
   }
 
-  async function addProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!productTitle.trim() || !productPrice || !productCategory.trim())
-      return;
-    if (!supabase) return setError("Supabase belum dikonfigurasi.");
-    setIsSaving(true);
-    const slug = productTitle
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const { error: insertError } = await supabase.from("products").insert({
-      title: productTitle.trim(),
-      slug,
-      description: "",
-      category: productCategory.trim(),
-      price: Number(productPrice),
-      stock: 0,
-      image_url: productImageUrl.trim(),
-      status: "active",
-      is_featured: false,
-    });
-    setIsSaving(false);
-    if (insertError) return setError(insertError.message);
+  function resetProductForm() {
+    setEditingProductId(null);
     setProductTitle("");
+    setProductDescription("");
     setProductPrice("");
+    setProductStock("0");
     setProductCategory("");
     setProductImageUrl("");
-    showResult("Produk PO berhasil ditambahkan.");
-    await loadData();
+    setProductStatus("active");
+    setProductIsFeatured(false);
+    setIsCatalog(true);
+    setSelectedProductFiles([]);
+    setProductImageInputKey((key) => key + 1);
+  }
+
+  function startProductEdit(product: Product) {
+    setEditingProductId(product.id);
+    setProductTitle(product.title);
+    setProductDescription(product.description ?? "");
+    setProductPrice(String(product.price));
+    setProductStock(String(product.stock));
+    setProductCategory(product.category ?? "");
+    setProductImageUrl(product.image_url ?? "");
+    setProductStatus(product.status);
+    setProductIsFeatured(product.is_featured);
+    setIsCatalog(product.is_catalog);
+    setSelectedProductFiles([]);
+    setProductImageInputKey((key) => key + 1);
+    setError("");
+    setNotice("");
+  }
+
+  function productImagesFor(productId: string) {
+    return productImages
+      .filter((image) => image.product_id === productId)
+      .sort(
+        (left, right) =>
+          left.sort_order - right.sort_order ||
+          left.created_at.localeCompare(right.created_at),
+      );
+  }
+
+  function selectProductImageFiles(fileList: FileList | null) {
+    setError("");
+    setNotice("");
+    const incomingFiles = Array.from(fileList ?? []);
+    if (!incomingFiles.length) return;
+
+    const currentProduct = editingProductId
+      ? products.find((product) => product.id === editingProductId)
+      : undefined;
+    const existingImages = editingProductId
+      ? productImagesFor(editingProductId)
+      : [];
+    const legacyImageCount =
+      editingProductId &&
+      existingImages.length === 0 &&
+      currentProduct?.image_url
+        ? 1
+        : 0;
+    const totalCount =
+      existingImages.length +
+      legacyImageCount +
+      selectedProductFiles.length +
+      incomingFiles.length;
+    if (totalCount > maxProductImages) {
+      setError("Maksimal 5 foto per produk.");
+      setProductImageInputKey((key) => key + 1);
+      return;
+    }
+
+    const invalidType = incomingFiles.find(
+      (file) => !allowedProductImageTypes[file.type],
+    );
+    if (invalidType) {
+      setError("Format foto harus JPG, PNG, atau WebP.");
+      setProductImageInputKey((key) => key + 1);
+      return;
+    }
+    if (incomingFiles.some((file) => file.size > maxProductImageSize)) {
+      setError("Ukuran maksimal setiap foto adalah 5 MB.");
+      setProductImageInputKey((key) => key + 1);
+      return;
+    }
+
+    setSelectedProductFiles((files) => [...files, ...incomingFiles]);
+    setProductImageInputKey((key) => key + 1);
+  }
+
+  function removePendingProductImage(index: number) {
+    setSelectedProductFiles((files) => files.filter((_, i) => i !== index));
+  }
+
+  async function uploadProductImages(productId: string, files: File[]) {
+    if (!supabase || files.length === 0) return;
+    const admin = await verifyAdmin(supabase);
+    if (!admin) {
+      setIsAdmin(false);
+      throw new Error("unauthorized");
+    }
+
+    const existingImages = productImagesFor(productId);
+    const product = products.find((item) => item.id === productId);
+    const existingCount =
+      existingImages.length === 0 && product?.image_url
+        ? 1
+        : existingImages.length;
+    if (existingCount + files.length > maxProductImages) {
+      throw new ProductImagesUploadError(false, "limit");
+    }
+
+    const uploadedPaths: string[] = [];
+    const insertedIds: string[] = [];
+    const hasPrimary = existingImages.some((image) => image.is_primary);
+    let nextSortOrder =
+      existingImages.reduce(
+        (maximum, image) => Math.max(maximum, image.sort_order),
+        -1,
+      ) + 1;
+
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const extension = allowedProductImageTypes[file.type];
+        if (!extension || file.size > maxProductImageSize) {
+          throw new Error("invalid-file");
+        }
+        const path = `products/${productId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await supabase.storage
+          .from(productImageBucket)
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (uploadError) throw uploadError;
+        uploadedPaths.push(path);
+
+        const { data: imageRow, error: insertError } = await supabase
+          .from("product_images")
+          .insert({
+            product_id: productId,
+            image_url: supabase.storage
+              .from(productImageBucket)
+              .getPublicUrl(path).data.publicUrl,
+            is_primary: !hasPrimary && index === 0,
+            sort_order: nextSortOrder,
+          })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+        insertedIds.push(imageRow.id);
+        nextSortOrder += 1;
+      }
+    } catch {
+      let cleanupFailed = false;
+      if (insertedIds.length > 0) {
+        const { error: recordsCleanupError } = await supabase
+          .from("product_images")
+          .delete()
+          .eq("product_id", productId)
+          .in("id", insertedIds);
+        cleanupFailed = Boolean(recordsCleanupError);
+      }
+      if (!cleanupFailed && uploadedPaths.length > 0) {
+        const { error: filesCleanupError } = await supabase.storage
+          .from(productImageBucket)
+          .remove(uploadedPaths);
+        cleanupFailed = Boolean(filesCleanupError);
+      }
+      if (cleanupFailed && process.env.NODE_ENV === "development") {
+        console.error("[Admin Catalog] Product image rollback was incomplete.");
+      }
+      throw new ProductImagesUploadError(cleanupFailed);
+    }
+  }
+
+  async function applyPrimaryProductImage(productId: string, imageId: string) {
+    if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+    const previousPrimary = productImagesFor(productId).find(
+      (image) => image.is_primary,
+    );
+    if (previousPrimary?.id === imageId) return;
+
+    const { error: clearError } = await supabase
+      .from("product_images")
+      .update({ is_primary: false })
+      .eq("product_id", productId)
+      .neq("id", imageId);
+    if (clearError) throw clearError;
+
+    const { data, error: primaryError } = await supabase
+      .from("product_images")
+      .update({ is_primary: true })
+      .eq("product_id", productId)
+      .eq("id", imageId)
+      .select("id")
+      .maybeSingle();
+    if (primaryError || !data) {
+      if (previousPrimary) {
+        await supabase
+          .from("product_images")
+          .update({ is_primary: true })
+          .eq("product_id", productId)
+          .eq("id", previousPrimary.id);
+      }
+      throw primaryError ?? new Error("Foto tidak ditemukan.");
+    }
+
+    setProductImages((images) =>
+      images.map((image) =>
+        image.product_id === productId
+          ? { ...image, is_primary: image.id === imageId }
+          : image,
+      ),
+    );
+  }
+
+  async function setPrimaryProductImage(image: ProductImage) {
+    if (!supabase || busyProductImageId || isSaving) return;
+    setBusyProductImageId(image.id);
+    setError("");
+    setNotice("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      await applyPrimaryProductImage(image.product_id, image.id);
+      showResult("Foto utama berhasil diperbarui.");
+    } catch {
+      setError("Foto utama gagal diperbarui. Silakan coba lagi.");
+    } finally {
+      setBusyProductImageId(null);
+    }
+  }
+
+  async function deleteProductImage(image: ProductImage) {
+    if (!supabase || busyProductImageId || isSaving) return;
+    if (!window.confirm("Hapus foto ini dari gallery produk?")) return;
+
+    setBusyProductImageId(image.id);
+    setError("");
+    setNotice("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+
+      const storagePath = getProductStoragePath(
+        supabase,
+        image.product_id,
+        image.image_url,
+      );
+      if (storagePath) {
+        const { error: storageError } = await supabase.storage
+          .from(productImageBucket)
+          .remove([storagePath]);
+        if (storageError) {
+          setError(
+            "File foto gagal dihapus dari Storage; data gallery tetap aman.",
+          );
+          return;
+        }
+      }
+
+      const { data, error: recordError } = await supabase
+        .from("product_images")
+        .delete()
+        .eq("product_id", image.product_id)
+        .eq("id", image.id)
+        .select("id")
+        .maybeSingle();
+      if (recordError || !data) {
+        setError(
+          storagePath
+            ? "File foto terhapus, tetapi record gallery gagal dihapus. Segarkan data sebelum mencoba lagi."
+            : "Record foto gagal dihapus dari gallery.",
+        );
+        return;
+      }
+
+      const remainingImages = productImagesFor(image.product_id).filter(
+        (item) => item.id !== image.id,
+      );
+      setProductImages((items) => items.filter((item) => item.id !== image.id));
+      if (image.is_primary && remainingImages.length > 0) {
+        try {
+          await applyPrimaryProductImage(
+            image.product_id,
+            remainingImages[0].id,
+          );
+        } catch {
+          setError(
+            "Foto terhapus, tetapi foto utama pengganti gagal ditetapkan. Silakan pilih foto utama kembali.",
+          );
+          return;
+        }
+      }
+      showResult("Foto produk berhasil dihapus.");
+    } catch {
+      setError("Foto gagal dihapus. Silakan coba lagi.");
+    } finally {
+      setBusyProductImageId(null);
+    }
+  }
+
+  async function moveProductImage(image: ProductImage, direction: -1 | 1) {
+    if (!supabase || busyProductImageId || isSaving) return;
+    const orderedImages = productImagesFor(image.product_id);
+    const currentIndex = orderedImages.findIndex(
+      (item) => item.id === image.id,
+    );
+    const targetIndex = currentIndex + direction;
+    if (
+      currentIndex < 0 ||
+      targetIndex < 0 ||
+      targetIndex >= orderedImages.length
+    ) {
+      return;
+    }
+    const current = orderedImages[currentIndex];
+    const target = orderedImages[targetIndex];
+
+    setBusyProductImageId(image.id);
+    setError("");
+    setNotice("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      const [currentResult, targetResult] = await Promise.all([
+        supabase
+          .from("product_images")
+          .update({ sort_order: target.sort_order })
+          .eq("product_id", image.product_id)
+          .eq("id", current.id),
+        supabase
+          .from("product_images")
+          .update({ sort_order: current.sort_order })
+          .eq("product_id", image.product_id)
+          .eq("id", target.id),
+      ]);
+      if (currentResult.error || targetResult.error) {
+        await loadData();
+        throw new Error("sort-update");
+      }
+      setProductImages((items) =>
+        items.map((item) => {
+          if (item.id === current.id) {
+            return { ...item, sort_order: target.sort_order };
+          }
+          if (item.id === target.id) {
+            return { ...item, sort_order: current.sort_order };
+          }
+          return item;
+        }),
+      );
+      showResult("Urutan foto berhasil diperbarui.");
+    } catch {
+      setError("Urutan foto gagal diperbarui. Silakan coba lagi.");
+    } finally {
+      setBusyProductImageId(null);
+    }
+  }
+
+  async function saveProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = productTitle.trim();
+    const category = productCategory.trim();
+    const price = Number(productPrice);
+    const stock = Number(productStock);
+    if (!title) return setError("Judul produk wajib diisi.");
+    if (!category) return setError("Kategori produk wajib diisi.");
+    if (!productPrice.trim() || !Number.isFinite(price) || price < 0) {
+      return setError("Harga harus berupa angka nol atau lebih.");
+    }
+    if (!productStock.trim() || !Number.isInteger(stock) || stock < 0) {
+      return setError("Stok harus berupa bilangan bulat nol atau lebih.");
+    }
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
+    if (isSaving) return;
+
+    setIsSaving(true);
+    setError("");
+    setNotice("");
+    const hasNewPhotos = selectedProductFiles.length > 0;
+    let savedProductId: string | null = editingProductId;
+    let createdProduct = false;
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+
+      const values = {
+        title,
+        description: productDescription.trim() || null,
+        category,
+        price,
+        stock,
+        image_url: productImageUrl.trim() || null,
+        is_catalog: isCatalog,
+        status: productStatus,
+        is_featured: productIsFeatured,
+      };
+
+      if (editingProductId) {
+        const { data, error: updateError } = await supabase
+          .from("products")
+          .update(values)
+          .eq("id", editingProductId)
+          .select("id")
+          .maybeSingle();
+        if (updateError) throw updateError;
+        if (!data) throw new Error("product-not-found");
+      } else {
+        savedProductId = await insertProductWithUniqueSlug(
+          supabase,
+          values,
+          title,
+        );
+        createdProduct = true;
+        setEditingProductId(savedProductId);
+      }
+
+      if (savedProductId && selectedProductFiles.length > 0) {
+        await uploadProductImages(savedProductId, selectedProductFiles);
+      }
+
+      resetProductForm();
+      await loadData();
+      showResult(
+        createdProduct
+          ? hasNewPhotos
+            ? "Produk dan foto berhasil ditambahkan."
+            : "Produk berhasil ditambahkan."
+          : hasNewPhotos
+            ? "Produk dan foto berhasil diperbarui."
+            : "Produk berhasil diperbarui.",
+      );
+    } catch (saveError) {
+      if (saveError instanceof ProductImagesUploadError) {
+        if (savedProductId) {
+          setEditingProductId(savedProductId);
+          await loadData();
+        }
+        if (saveError.reason === "limit") {
+          setError("Foto produk sudah mencapai batas maksimal 5 foto.");
+        } else {
+          setError(
+            saveError.cleanupFailed
+              ? "Upload foto gagal dan sebagian file sementara tidak dapat dibersihkan. Produk tetap tersimpan; periksa gallery sebelum mencoba lagi."
+              : "Upload foto gagal. Produk tetap tersimpan dan file pilihan masih tersedia untuk dicoba kembali.",
+          );
+        }
+      } else if (saveError instanceof DuplicateProductSlugError) {
+        setError(
+          "Slug produk tidak dapat dibuat unik. Ubah judul lalu coba lagi.",
+        );
+      } else if (
+        typeof saveError === "object" &&
+        saveError !== null &&
+        "code" in saveError &&
+        saveError.code === "23505"
+      ) {
+        setError("Produk dengan slug yang sama sudah ada. Coba judul lain.");
+      } else {
+        setError("Produk gagal disimpan. Periksa data lalu coba lagi.");
+      }
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function updateProductStatus(id: string, status: ProductStatus) {
-    if (!supabase) return setError("Supabase belum dikonfigurasi.");
-    const { error: updateError } = await supabase
-      .from("products")
-      .update({ status })
-      .eq("id", id);
-    if (updateError) return setError(updateError.message);
-    setProducts((items) =>
-      items.map((item) => (item.id === id ? { ...item, status } : item)),
-    );
-    showResult("Status produk berhasil diperbarui.");
+    if (!supabase || isSaving || busyProductId) return;
+    setBusyProductId(id);
+    setError("");
+    setNotice("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      const { data, error: updateError } = await supabase
+        .from("products")
+        .update({ status })
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+      if (updateError || !data) throw new Error("status-update");
+      setProducts((items) =>
+        items.map((item) => (item.id === id ? { ...item, status } : item)),
+      );
+      showResult("Status produk berhasil diperbarui.");
+    } catch {
+      setError("Status produk gagal diperbarui. Silakan coba lagi.");
+    } finally {
+      setBusyProductId(null);
+    }
   }
 
-  async function updatePaymentStatus(id: string, paymentStatus: PaymentStatus) {
-    if (!supabase) return setError("Supabase belum dikonfigurasi.");
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update({ payment_status: paymentStatus })
-      .eq("id", id);
-    if (updateError) return setError(updateError.message);
-    setOrders((items) =>
-      items.map((item) =>
-        item.id === id ? { ...item, payment_status: paymentStatus } : item,
-      ),
-    );
-    showResult("Status pembayaran berhasil diperbarui.");
+  async function deleteProduct(product: Product) {
+    if (
+      !window.confirm(
+        `Hapus produk "${product.title}"? Produk yang sedang dipakai oleh data lain tidak akan dihapus otomatis.`,
+      )
+    ) {
+      return;
+    }
+    if (!supabase || isSaving || busyProductId) return;
+
+    setBusyProductId(product.id);
+    setError("");
+    setNotice("");
+    try {
+      const admin = await verifyAdmin(supabase);
+      if (!admin) {
+        setIsAdmin(false);
+        setError("Halaman ini hanya dapat diakses oleh admin.");
+        return;
+      }
+      const { data, error: deleteError } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", product.id)
+        .select("id")
+        .maybeSingle();
+      if (deleteError?.code === "23503") {
+        setError(
+          "Produk tidak dapat dihapus karena masih digunakan pada data lain.",
+        );
+        return;
+      }
+      if (deleteError) throw deleteError;
+      if (!data) throw new Error("product-not-found");
+      if (editingProductId === product.id) resetProductForm();
+      showResult("Produk berhasil dihapus.");
+      await loadData();
+    } catch {
+      setError("Produk gagal dihapus. Silakan coba lagi.");
+    } finally {
+      setBusyProductId(null);
+    }
   }
 
   const filteredShipments = shipments.filter((item) =>
@@ -365,6 +1107,27 @@ export default function AdminPage() {
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
+  const editingProduct = products.find(
+    (product) => product.id === editingProductId,
+  );
+  const editingProductImages = editingProductId
+    ? productImagesFor(editingProductId)
+    : [];
+  const legacyEditingImage =
+    editingProductImages.length === 0 ? editingProduct?.image_url : null;
+  const editingPhotoCount =
+    editingProductImages.length +
+    (legacyEditingImage ? 1 : 0) +
+    selectedProductFiles.length;
+
+  function mainProductImage(product: Product) {
+    const images = productImagesFor(product.id);
+    return (
+      images.find((image) => image.is_primary)?.image_url ??
+      images[0]?.image_url ??
+      product.image_url
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] px-4 py-8 text-slate-700 sm:px-8 lg:px-10 lg:py-10">
@@ -408,7 +1171,7 @@ export default function AdminPage() {
         )}
 
         <nav
-          className="mb-8 grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-3"
+          className="mb-8 grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 xl:grid-cols-4"
           aria-label="Admin features"
         >
           {tabs.map(({ id, label, icon: Icon }) => (
@@ -608,138 +1371,432 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === "products" && (
-          <div className="space-y-6">
-            <SectionCard
-              title="Tambah Produk PO Baru"
-              description="Publikasikan item baru ke katalog pre-order pelanggan."
-            >
-              <form
-                onSubmit={addProduct}
-                className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+        {activeTab === "products" &&
+          (isAdmin === false ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
+              Halaman ini hanya dapat diakses oleh admin.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <SectionCard
+                title={
+                  editingProductId ? "Edit Produk" : "Tambah Produk PO Baru"
+                }
+                description={
+                  editingProductId
+                    ? "Perbarui informasi produk tanpa mengubah slug yang sudah digunakan."
+                    : "Publikasikan item baru ke katalog pre-order pelanggan."
+                }
               >
-                <label className="text-sm font-bold text-[#0F3854] lg:col-span-2">
-                  Judul produk
-                  <input
-                    required
-                    value={productTitle}
-                    onChange={(event) => setProductTitle(event.target.value)}
-                    placeholder="Album K-Pop terbaru"
-                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
-                  />
-                </label>
-                <label className="text-sm font-bold text-[#0F3854]">
-                  Harga (IDR)
-                  <input
-                    required
-                    type="number"
-                    min="0"
-                    value={productPrice}
-                    onChange={(event) => setProductPrice(event.target.value)}
-                    placeholder="350000"
-                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
-                  />
-                </label>
-                <label className="text-sm font-bold text-[#0F3854]">
-                  Kategori
-                  <input
-                    required
-                    value={productCategory}
-                    onChange={(event) => setProductCategory(event.target.value)}
-                    placeholder="K-Pop"
-                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
-                  />
-                </label>
-                <label className="text-sm font-bold text-[#0F3854] md:col-span-2 lg:col-span-3">
-                  URL gambar
-                  <input
-                    type="url"
-                    value={productImageUrl}
-                    onChange={(event) => setProductImageUrl(event.target.value)}
-                    placeholder="https://..."
-                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
-                  />
-                </label>
-                <div className="flex items-end">
-                  <button
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#E5B869] px-4 py-2.5 text-sm font-extrabold text-[#0F3854] transition hover:bg-[#d9a852] disabled:opacity-50"
-                  >
-                    <Plus className="h-4 w-4" /> Tambah produk
-                  </button>
-                </div>
-              </form>
-            </SectionCard>
-            <SectionCard
-              title="Daftar Produk PO"
-              description={`${products.length} produk di katalog saat ini.`}
-            >
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {products.map((product) => (
-                  <article
-                    key={product.id}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white"
-                  >
-                    <div
-                      role="img"
-                      aria-label={product.title}
-                      className="flex aspect-[4/3] items-center justify-center bg-[#0F3854] bg-cover bg-center"
-                      style={
-                        product.image_url
-                          ? { backgroundImage: `url(${product.image_url})` }
-                          : undefined
+                <form
+                  onSubmit={(event) => void saveProduct(event)}
+                  className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+                >
+                  <label className="text-sm font-bold text-[#0F3854] lg:col-span-2">
+                    Judul produk
+                    <input
+                      required
+                      value={productTitle}
+                      onChange={(event) => setProductTitle(event.target.value)}
+                      placeholder="Album K-Pop terbaru"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-[#0F3854] md:col-span-2 lg:col-span-4">
+                    Deskripsi
+                    <textarea
+                      rows={3}
+                      value={productDescription}
+                      onChange={(event) =>
+                        setProductDescription(event.target.value)
                       }
-                    >
-                      {!product.image_url && (
-                        <Package className="h-12 w-12 text-[#E5B869]" />
-                      )}
-                    </div>
-                    <div className="p-4">
-                      <p className="text-xs font-bold uppercase tracking-wider text-[#E5B869]">
-                        {product.category || "Tanpa kategori"}
-                      </p>
-                      <h3 className="mt-1 min-h-10 font-extrabold text-[#0F3854]">
-                        {product.title}
-                      </h3>
-                      <p className="mt-2 font-bold text-slate-700">
-                        {formatCurrency(product.price)}
-                      </p>
-                      <div className="mt-4">
-                        <Select
-                          ariaLabel={`Status ${product.title}`}
-                          value={product.status}
-                          onChange={(value) =>
-                            void updateProductStatus(
-                              product.id,
-                              value as ProductStatus,
-                            )
-                          }
-                        >
-                          {productStatuses.map((status) => (
-                            <option key={status} value={status}>
-                              {statusLabel(status)}
-                            </option>
-                          ))}
-                        </Select>
+                      placeholder="Deskripsi produk (opsional)"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-[#0F3854]">
+                    Harga (IDR)
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      value={productPrice}
+                      onChange={(event) => setProductPrice(event.target.value)}
+                      placeholder="350000"
+                      step="any"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-[#0F3854]">
+                    Stock
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={productStock}
+                      onChange={(event) => setProductStock(event.target.value)}
+                      placeholder="0"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-[#0F3854]">
+                    Kategori
+                    <input
+                      required
+                      value={productCategory}
+                      onChange={(event) =>
+                        setProductCategory(event.target.value)
+                      }
+                      placeholder="K-Pop"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <label className="text-sm font-bold text-[#0F3854] md:col-span-2 lg:col-span-3">
+                    URL gambar
+                    <input
+                      type="url"
+                      value={productImageUrl}
+                      onChange={(event) =>
+                        setProductImageUrl(event.target.value)
+                      }
+                      placeholder="https://..."
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869]"
+                      disabled={isSaving}
+                    />
+                  </label>
+                  <section className="space-y-3 rounded-lg border border-slate-200 p-4 md:col-span-2 lg:col-span-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-[#0F3854]">
+                          Foto Produk
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Pilih JPG, PNG, atau WebP. Maksimal 5 MB per foto.
+                          Upload dilakukan saat produk disimpan.
+                        </p>
                       </div>
+                      <span className="text-xs font-bold text-slate-500">
+                        {editingPhotoCount}/{maxProductImages} foto
+                      </span>
                     </div>
-                  </article>
-                ))}
-              </div>
-              {!isLoading && !products.length && (
-                <p className="py-8 text-center text-sm text-slate-500">
-                  Belum ada produk PO.
-                </p>
-              )}
-            </SectionCard>
-          </div>
-        )}
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-bold text-[#0F3854] transition hover:bg-slate-50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+                      <ImagePlus className="h-4 w-4" />
+                      Tambah Foto
+                      <input
+                        key={productImageInputKey}
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) =>
+                          selectProductImageFiles(event.target.files)
+                        }
+                        className="sr-only"
+                        disabled={
+                          isSaving || editingPhotoCount >= maxProductImages
+                        }
+                      />
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                      {legacyEditingImage && (
+                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <div className="relative aspect-square bg-slate-100">
+                            <Image
+                              src={legacyEditingImage}
+                              alt="Foto produk lama"
+                              fill
+                              unoptimized
+                              sizes="160px"
+                              className="object-cover"
+                            />
+                          </div>
+                          <p className="px-2 py-1.5 text-[11px] font-semibold text-slate-500">
+                            Foto lama
+                          </p>
+                        </div>
+                      )}
+                      {editingProductImages.map((image) => (
+                        <div
+                          key={image.id}
+                          className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                        >
+                          <div className="relative aspect-square bg-slate-100">
+                            <Image
+                              src={image.image_url}
+                              alt="Foto produk"
+                              fill
+                              unoptimized
+                              sizes="160px"
+                              className="object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void setPrimaryProductImage(image)}
+                              disabled={isSaving || busyProductImageId !== null}
+                              aria-label={
+                                image.is_primary
+                                  ? "Foto utama produk"
+                                  : "Jadikan foto utama"
+                              }
+                              className={`absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full shadow-sm disabled:opacity-60 ${image.is_primary ? "bg-[#E5B869] text-[#0F3854]" : "bg-white/95 text-slate-500 hover:text-[#0F3854]"}`}
+                            >
+                              {busyProductImageId === image.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Star
+                                  className="h-4 w-4"
+                                  fill={
+                                    image.is_primary ? "currentColor" : "none"
+                                  }
+                                />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteProductImage(image)}
+                              disabled={isSaving || busyProductImageId !== null}
+                              aria-label="Hapus foto produk"
+                              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-60"
+                            >
+                              {busyProductImageId === image.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                          <p className="px-2 py-1.5 text-[11px] font-semibold text-slate-500">
+                            {image.is_primary
+                              ? "Foto utama"
+                              : `Urutan ${image.sort_order + 1}`}
+                          </p>
+                        </div>
+                      ))}
+                      {selectedProductFiles.map((file, index) => (
+                        <div
+                          key={`${file.name}-${file.lastModified}-${index}`}
+                          className="overflow-hidden rounded-lg border border-dashed border-[#3c8aba] bg-[#f3f9fc]"
+                        >
+                          <div className="relative aspect-square">
+                            {productPreviewUrls[index] && (
+                              <Image
+                                src={productPreviewUrls[index]}
+                                alt={`Preview ${file.name}`}
+                                fill
+                                unoptimized
+                                sizes="160px"
+                                className="object-cover"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removePendingProductImage(index)}
+                              disabled={isSaving}
+                              aria-label={`Batalkan ${file.name}`}
+                              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-60"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <p className="truncate px-2 py-1.5 text-[11px] font-semibold text-[#0F3854]">
+                            Belum diupload
+                          </p>
+                        </div>
+                      ))}
+                      {editingProductImages.length === 0 &&
+                        !legacyEditingImage &&
+                        selectedProductFiles.length === 0 && (
+                          <p className="col-span-full py-4 text-sm text-slate-400">
+                            Belum ada foto produk.
+                          </p>
+                        )}
+                    </div>
+                  </section>
+                  <label className="text-sm font-bold text-[#0F3854]">
+                    Status
+                    <Select
+                      ariaLabel="Status produk"
+                      value={productStatus}
+                      onChange={(value) =>
+                        setProductStatus(value as ProductStatus)
+                      }
+                      disabled={isSaving}
+                    >
+                      {productStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {statusLabel(status)}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="flex items-center gap-2 self-end pb-2 text-sm font-bold text-[#0F3854]">
+                    <input
+                      type="checkbox"
+                      checked={isCatalog}
+                      onChange={(event) => setIsCatalog(event.target.checked)}
+                      className="h-4 w-4 accent-[#0F3854]"
+                      disabled={isSaving}
+                    />
+                    Tampilkan di Katalog
+                  </label>
+                  <label className="flex items-center gap-2 self-end pb-2 text-sm font-bold text-[#0F3854]">
+                    <input
+                      type="checkbox"
+                      checked={productIsFeatured}
+                      onChange={(event) =>
+                        setProductIsFeatured(event.target.checked)
+                      }
+                      className="h-4 w-4 accent-[#0F3854]"
+                      disabled={isSaving}
+                    />
+                    Featured
+                  </label>
+                  <div className="flex items-end gap-2">
+                    <button
+                      disabled={isSaving}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#E5B869] px-4 py-2.5 text-sm font-extrabold text-[#0F3854] transition hover:bg-[#d9a852] disabled:opacity-50"
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : editingProductId ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      {isSaving
+                        ? "Menyimpan..."
+                        : editingProductId
+                          ? "Simpan perubahan"
+                          : "Tambah produk"}
+                    </button>
+                    {editingProductId && (
+                      <button
+                        type="button"
+                        onClick={resetProductForm}
+                        disabled={isSaving}
+                        className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </SectionCard>
+              <SectionCard
+                title="Daftar Produk PO"
+                description={`${products.length} produk di katalog saat ini.`}
+              >
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {products.map((product) => (
+                    <article
+                      key={product.id}
+                      className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                    >
+                      <div
+                        role="img"
+                        aria-label={product.title}
+                        className="flex aspect-[4/3] items-center justify-center bg-[#0F3854] bg-cover bg-center"
+                        style={
+                          mainProductImage(product)
+                            ? {
+                                backgroundImage: `url(${mainProductImage(product)})`,
+                              }
+                            : undefined
+                        }
+                      >
+                        {!mainProductImage(product) && (
+                          <Package className="h-12 w-12 text-[#E5B869]" />
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <p className="text-xs font-bold uppercase tracking-wider text-[#E5B869]">
+                          {product.category || "Tanpa kategori"}
+                        </p>
+                        <h3 className="mt-1 min-h-10 font-extrabold text-[#0F3854]">
+                          {product.title}
+                        </h3>
+                        <p className="mt-2 font-bold text-slate-700">
+                          {formatCurrency(product.price)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Stock: {product.stock}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Featured: {product.is_featured ? "Ya" : "Tidak"}
+                        </p>
+                        <div className="mt-4">
+                          <Select
+                            ariaLabel={`Status ${product.title}`}
+                            value={product.status}
+                            disabled={isSaving || busyProductId === product.id}
+                            onChange={(value) =>
+                              void updateProductStatus(
+                                product.id,
+                                value as ProductStatus,
+                              )
+                            }
+                          >
+                            {productStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {statusLabel(status)}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startProductEdit(product)}
+                            disabled={isSaving || busyProductId !== null}
+                            className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-[#0F3854] transition hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteProduct(product)}
+                            disabled={isSaving || busyProductId !== null}
+                            className="flex-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {busyProductId === product.id
+                              ? "Memproses..."
+                              : "Hapus"}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {!isLoading && !products.length && (
+                  <p className="py-8 text-center text-sm text-slate-500">
+                    Belum ada produk PO.
+                  </p>
+                )}
+              </SectionCard>
+            </div>
+          ))}
 
         {activeTab === "orders" && (
           <SectionCard
             title="Daftar Pesanan Masuk"
-            description="Verifikasi pembayaran pelanggan dan pantau total order secara realtime."
+            description="Pantau pesanan customer dan status pembayaran secara realtime."
           >
+            <div className="mb-5 flex flex-col justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center">
+              <p className="text-sm text-slate-600">
+                Pengelolaan status pesanan customer tersedia di halaman khusus.
+              </p>
+              <Link
+                href="/admin/orders"
+                className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#174e70]"
+              >
+                Kelola Pesanan
+              </Link>
+            </div>
             <div className="mb-5 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 sm:max-w-sm">
               <Search className="h-4 w-4 text-slate-400" />
               <input
@@ -786,22 +1843,9 @@ export default function AdminPage() {
                         {formatCurrency(order.total_price)}
                       </td>
                       <td className="py-4">
-                        <Select
-                          ariaLabel={`Pembayaran ${order.order_number}`}
-                          value={order.payment_status || "UNPAID"}
-                          onChange={(value) =>
-                            void updatePaymentStatus(
-                              order.id,
-                              value as PaymentStatus,
-                            )
-                          }
-                        >
-                          {paymentStatuses.map((status) => (
-                            <option key={status} value={status}>
-                              {statusLabel(status)}
-                            </option>
-                          ))}
-                        </Select>
+                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">
+                          {paymentStatusLabel(order.payment_status)}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -815,6 +1859,7 @@ export default function AdminPage() {
             </div>
           </SectionCard>
         )}
+        {activeTab === "preorder" && <PreorderManager />}
         {isLoading && (
           <div className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white shadow-xl">
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat data

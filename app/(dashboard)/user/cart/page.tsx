@@ -416,13 +416,12 @@ export default function UserCartPage() {
                 {formatCurrency(subtotal)}
               </span>
             </div>
-            <button
-              type="button"
-              disabled
-              className="mt-2 w-full cursor-not-allowed rounded-lg bg-slate-300 px-5 py-3 text-sm font-bold text-white"
+            <Link
+              href="/user/checkout"
+              className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#0F3854] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#174e70]"
             >
-              Checkout segera hadir
-            </button>
+              Lanjut ke Checkout
+            </Link>
           </aside>
         </div>
       )}

@@ -8,6 +8,7 @@ export type Json =
 
 export type ProfileRole = "customer" | "admin";
 export type ProductStatus = "active" | "inactive" | "out_of_stock";
+export type PreorderEventStatus = "draft" | "active" | "closed" | "cancelled";
 
 export interface Database {
   public: {
@@ -47,11 +48,12 @@ export interface Database {
           id: string;
           title: string;
           slug: string;
-          description: string;
-          category: string;
+          description: string | null;
+          category: string | null;
           price: number;
           stock: number;
-          image_url: string;
+          image_url: string | null;
+          is_catalog: boolean;
           status: ProductStatus;
           is_featured: boolean;
           created_at: string;
@@ -61,11 +63,12 @@ export interface Database {
           id?: string;
           title: string;
           slug: string;
-          description: string;
-          category: string;
+          description?: string | null;
+          category?: string | null;
           price: number;
           stock: number;
-          image_url: string;
+          image_url?: string | null;
+          is_catalog?: boolean;
           status?: ProductStatus;
           is_featured?: boolean;
           created_at?: string;
@@ -75,17 +78,129 @@ export interface Database {
           id?: string;
           title?: string;
           slug?: string;
-          description?: string;
-          category?: string;
+          description?: string | null;
+          category?: string | null;
           price?: number;
           stock?: number;
-          image_url?: string;
+          image_url?: string | null;
+          is_catalog?: boolean;
           status?: ProductStatus;
           is_featured?: boolean;
           created_at?: string;
           updated_at?: string;
         };
         Relationships: [];
+      };
+      product_images: {
+        Row: {
+          id: string;
+          product_id: string;
+          image_url: string;
+          is_primary: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          image_url: string;
+          is_primary: boolean;
+          sort_order: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          image_url?: string;
+          is_primary?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      preorder_events: {
+        Row: {
+          id: string;
+          title: string;
+          slug: string;
+          description: string | null;
+          cover_image_url: string | null;
+          status: PreorderEventStatus;
+          starts_at: string | null;
+          ends_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          slug: string;
+          description?: string | null;
+          cover_image_url?: string | null;
+          status?: PreorderEventStatus;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          slug?: string;
+          description?: string | null;
+          cover_image_url?: string | null;
+          status?: PreorderEventStatus;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      preorder_event_products: {
+        Row: {
+          id: string;
+          event_id: string;
+          product_id: string;
+          preorder_price: number;
+          preorder_stock: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_id: string;
+          product_id: string;
+          preorder_price?: number;
+          preorder_stock?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_id?: string;
+          product_id?: string;
+          preorder_price?: number;
+          preorder_stock?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "preorder_event_products_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "preorder_events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "preorder_event_products_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       addresses: {
         Row: {
@@ -443,7 +558,12 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      checkout_catalog: {
+        Args: { p_address_id: string };
+        Returns: string;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

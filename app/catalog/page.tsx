@@ -145,7 +145,11 @@ function CatalogLanding() {
               ) : filteredProducts.length > 0 ? (
                 <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {filteredProducts.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      detailHref={`/catalog/${encodeURIComponent(product.slug)}`}
+                    />
                   ))}
                 </div>
               ) : (

@@ -2,6 +2,7 @@
 
 import { Heart, Loader2, ShoppingCart } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/lib/supabase/database";
@@ -15,7 +16,13 @@ import { formatCurrency } from "@/lib/format-currency";
 
 export type Product = Database["public"]["Tables"]["products"]["Row"];
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  detailHref,
+}: {
+  product: Product;
+  detailHref?: string;
+}) {
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -62,7 +69,7 @@ export default function ProductCard({ product }: { product: Product }) {
   }
 
   return (
-    <article className="group min-w-0">
+    <article className="group flex h-full min-w-0 flex-col">
       <div className="relative aspect-[0.88] overflow-hidden rounded-[3px] bg-[#f1f1ef]">
         <span className="absolute left-3 top-3 z-10 bg-[#292421] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-white">
           {isAvailable
@@ -101,41 +108,56 @@ export default function ProductCard({ product }: { product: Product }) {
             </strong>
           </div>
         )}
+        {detailHref && (
+          <Link
+            href={detailHref}
+            aria-label={`Lihat detail ${product.title}`}
+            className="absolute inset-0 z-[1]"
+          />
+        )}
       </div>
       <h2 className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-[#332d2a]">
-        {product.title}
-      </h2>
-      <p className="mt-1 text-sm font-semibold text-[#b86645]">
-        {formatCurrency(product.price)}
-      </p>
-      <p className="mt-1 text-xs text-[#8c817a]">
-        {product.category || "KSHOOCKY Select"}
-      </p>
-      <button
-        type="button"
-        onClick={() => void handleAddToCart()}
-        disabled={!isAvailable || isAdding}
-        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#0F3854] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:bg-slate-300"
-      >
-        {isAdding ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+        {detailHref ? (
+          <Link href={detailHref} className="hover:text-[#0F3854]">
+            {product.title}
+          </Link>
         ) : (
-          <ShoppingCart className="h-4 w-4" />
+          product.title
         )}
-        {isAdding
-          ? "Menambahkan..."
-          : isAvailable
-            ? "Tambah ke Keranjang"
-            : "Tidak tersedia"}
-      </button>
-      {feedback && (
-        <p
-          aria-live="polite"
-          className="mt-2 text-xs font-semibold text-[#0F3854]"
-        >
-          {feedback}
+      </h2>
+      <div className="mt-auto">
+        <p className="mt-1 text-sm font-semibold text-[#b86645]">
+          {formatCurrency(product.price)}
         </p>
-      )}
+        <p className="mt-1 text-xs text-[#8c817a]">
+          {product.category || "KSHOOCKY Select"}
+        </p>
+        <button
+          type="button"
+          onClick={() => void handleAddToCart()}
+          disabled={!isAvailable || isAdding}
+          className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#0F3854] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {isAdding ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShoppingCart className="h-4 w-4" />
+          )}
+          {isAdding
+            ? "Menambahkan..."
+            : isAvailable
+              ? "Tambah ke Keranjang"
+              : "Tidak tersedia"}
+        </button>
+        {feedback && (
+          <p
+            aria-live="polite"
+            className="mt-2 text-xs font-semibold text-[#0F3854]"
+          >
+            {feedback}
+          </p>
+        )}
+      </div>
     </article>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -9,8 +10,106 @@ import {
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
-import ProductCard from "@/components/ProductCard";
-import { useProducts } from "@/hooks/useProducts";
+import ProductCard, { Product } from "@/components/ProductCard";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/database";
+
+type PreorderEvent = Database["public"]["Tables"]["preorder_events"]["Row"];
+type PreorderEventProduct =
+  Database["public"]["Tables"]["preorder_event_products"]["Row"];
+type EventProductRow = Pick<
+  PreorderEventProduct,
+  "id" | "event_id" | "product_id" | "preorder_price" | "preorder_stock"
+> & { products: Product | null };
+type EventProduct = {
+  id: string;
+  event_id: string;
+  preorder_price: number;
+  preorder_stock: number;
+  product: Product;
+};
+
+const emptyEventsError = "Data preorder gagal dimuat. Silakan coba lagi.";
+
+function usePreorderData() {
+  const [events, setEvents] = useState<PreorderEvent[]>([]);
+  const [eventProducts, setEventProducts] = useState<EventProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(false);
+    if (!isSupabaseConfigured) {
+      setLoadError(true);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { data: activeEvents, error: eventsError } = await supabase
+        .from("preorder_events")
+        .select(
+          "id, title, slug, description, cover_image_url, status, starts_at, ends_at, created_at, updated_at",
+        )
+        .eq("status", "active")
+        .order("starts_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false });
+      if (eventsError) throw eventsError;
+
+      const activeEventIds = (activeEvents ?? []).map((event) => event.id);
+      let mappedEventProducts: EventProduct[] = [];
+
+      if (activeEventIds.length > 0) {
+        const { data: rows, error: productsError } = await supabase
+          .from("preorder_event_products")
+          .select(
+            "id, event_id, product_id, preorder_price, preorder_stock, products!inner(id, title, slug, description, category, price, stock, image_url, is_catalog, status, is_featured, created_at, updated_at)",
+          )
+          .in("event_id", activeEventIds)
+          .gt("preorder_stock", 0)
+          .eq("products.status", "active");
+        if (productsError) throw productsError;
+
+        mappedEventProducts = ((rows ?? []) as EventProductRow[]).flatMap(
+          (row) =>
+            row.products
+              ? [
+                  {
+                    id: row.id,
+                    event_id: row.event_id,
+                    preorder_price: row.preorder_price,
+                    preorder_stock: row.preorder_stock,
+                    product: {
+                      ...row.products,
+                      price: row.preorder_price,
+                      stock: row.preorder_stock,
+                    },
+                  },
+                ]
+              : [],
+        );
+      }
+
+      setEvents(activeEvents ?? []);
+      setEventProducts(mappedEventProducts);
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[Preorder] Supabase query failed", error);
+      }
+      setLoadError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  return { events, eventProducts, isLoading, loadError };
+}
 
 function FilterSection({
   title,
@@ -62,20 +161,38 @@ function Check({
 }
 
 export default function PreorderCatalog() {
-  const { products, isLoading, loadError } = useProducts();
+  const { events, eventProducts, isLoading, loadError } = usePreorderData();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Semua");
+  const [selectedEventId, setSelectedEventId] = useState("");
+  useEffect(() => {
+    if (
+      events.length > 0 &&
+      !events.some((event) => event.id === selectedEventId)
+    ) {
+      setSelectedEventId(events[0].id);
+    }
+  }, [events, selectedEventId]);
+
+  const selectedEvent = events.find((event) => event.id === selectedEventId);
+  const currentEventProducts = eventProducts.filter(
+    (item) => item.event_id === selectedEvent?.id,
+  );
   const filteredProducts = useMemo(
     () =>
-      products.filter(
-        (product) =>
+      currentEventProducts.filter(
+        ({ product }) =>
           (category === "Semua" || product.category === category) &&
           product.title.toLowerCase().includes(query.toLowerCase()),
       ),
-    [category, products, query],
+    [category, currentEventProducts, query],
   );
   const categories = Array.from(
-    new Set(products.map((product) => product.category).filter(Boolean)),
+    new Set(
+      currentEventProducts
+        .map(({ product }) => product.category)
+        .filter((item): item is string => Boolean(item)),
+    ),
   );
 
   return (
@@ -84,6 +201,17 @@ export default function PreorderCatalog() {
       <main className="bg-[#fffdfb] text-[#332d2a]">
         <section className="mx-auto max-w-[1320px] px-5 pt-5 lg:px-8 lg:pt-7">
           <div className="relative flex min-h-[215px] items-end overflow-hidden bg-[#0F3854] px-6 py-7 sm:min-h-[285px] sm:px-10 lg:px-14">
+            {selectedEvent?.cover_image_url && (
+              <Image
+                src={selectedEvent.cover_image_url}
+                alt={selectedEvent.title}
+                fill
+                unoptimized
+                priority
+                className="object-cover"
+              />
+            )}
+            <div className="absolute inset-0 bg-[#0F3854]/55" />
             <div className="absolute -right-10 -top-16 h-64 w-64 rounded-full border-[26px] border-[#f1b15d]/90 opacity-90" />
             <div className="absolute right-[22%] top-10 h-28 w-28 rounded-full bg-[#8bc5d4] opacity-90" />
             <div className="relative max-w-xl text-white">
@@ -91,14 +219,37 @@ export default function PreorderCatalog() {
                 Kshoocky official shop
               </p>
               <h1 className="text-4xl font-extrabold leading-none sm:text-6xl">
-                Pre Order
+                {selectedEvent?.title ?? "Pre Order"}
               </h1>
-              <p className="mt-4 max-w-sm text-sm leading-6 text-white/85">
-                Amankan album dan merchandise favoritmu sebelum kehabisan.
-              </p>
+              {(selectedEvent?.description || !events.length) && (
+                <p className="mt-4 max-w-xl text-sm leading-6 text-white/85">
+                  {selectedEvent?.description ??
+                    "Amankan album dan merchandise favoritmu sebelum kehabisan."}
+                </p>
+              )}
             </div>
           </div>
         </section>
+        {events.length > 1 && (
+          <nav
+            aria-label="Pilih event preorder"
+            className="mx-auto flex max-w-[1320px] flex-wrap gap-2 px-5 pt-4 lg:px-8"
+          >
+            {events.map((event) => (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => {
+                  setSelectedEventId(event.id);
+                  setCategory("Semua");
+                }}
+                className={`rounded-[3px] border px-3 py-2 text-xs font-semibold transition-colors ${selectedEvent?.id === event.id ? "border-[#0F3854] bg-[#0F3854] text-white" : "border-[#e5ded8] bg-white text-[#584e48] hover:border-[#0F3854]"}`}
+              >
+                {event.title}
+              </button>
+            ))}
+          </nav>
+        )}
         <div className="mx-auto flex max-w-[1320px] gap-5 px-5 pb-16 pt-4 lg:px-8">
           <aside className="hidden w-[235px] shrink-0 rounded-[3px] border border-[#e5ded8] bg-white lg:block">
             <div className="border-b border-[#eee9e4] p-3">
@@ -173,16 +324,27 @@ export default function PreorderCatalog() {
             </div>
             {isLoading ? (
               <p className="py-20 text-center text-sm text-[#8c817a]">
-                Memuat produk...
+                Sementara memuat preorder...
               </p>
             ) : loadError ? (
               <p className="py-20 text-center text-sm text-red-700">
-                Produk gagal dimuat. Silakan coba lagi.
+                {emptyEventsError}
+              </p>
+            ) : events.length === 0 ? (
+              <p className="py-20 text-center text-sm text-[#8c817a]">
+                Belum ada event preorder aktif.
+              </p>
+            ) : currentEventProducts.length === 0 ? (
+              <p className="py-20 text-center text-sm text-[#8c817a]">
+                Belum ada produk tersedia untuk event ini.
               </p>
             ) : filteredProducts.length > 0 ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 lg:gap-x-5">
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                {filteredProducts.map((eventProduct) => (
+                  <ProductCard
+                    key={eventProduct.id}
+                    product={eventProduct.product}
+                  />
                 ))}
               </div>
             ) : (
