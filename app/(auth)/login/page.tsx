@@ -68,7 +68,34 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/user");
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", sessionData.session.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        await supabase.auth.signOut();
+        setFormError("Role akun gagal diverifikasi. Silakan coba lagi.");
+        return;
+      }
+
+      if (!profile) {
+        await supabase.auth.signOut();
+        setFormError(
+          "Profil akun tidak ditemukan. Silakan hubungi administrator.",
+        );
+        return;
+      }
+
+      if (profile.role === "admin") {
+        router.replace("/admin");
+      } else if (profile.role === "customer") {
+        router.replace("/user");
+      } else {
+        await supabase.auth.signOut();
+        setFormError("Role akun tidak valid. Silakan hubungi administrator.");
+      }
     } catch {
       setFormError("Terjadi kesalahan saat masuk. Silakan coba lagi.");
     } finally {
