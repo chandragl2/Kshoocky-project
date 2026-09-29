@@ -12,6 +12,7 @@ import {
   ClipboardList,
   ImagePlus,
   Loader2,
+  LockKeyhole,
   Package,
   Plus,
   RefreshCw,
@@ -295,9 +296,6 @@ export default function AdminPage() {
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [search, setSearch] = useState("");
   const [shipmentOrderId, setShipmentOrderId] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
@@ -315,6 +313,10 @@ export default function AdminPage() {
   const [productIsFeatured, setProductIsFeatured] = useState(false);
   const [isCatalog, setIsCatalog] = useState(true);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -466,21 +468,21 @@ export default function AdminPage() {
     window.setTimeout(() => setNotice(""), 3500);
   }
 
-  async function changePassword(event: FormEvent<HTMLFormElement>) {
+  async function changeAdminPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return setError("Supabase belum dikonfigurasi.");
-    if (isSaving) return;
+    if (isChangingPassword) return;
     if (newPassword.length < 8) {
       return setError("Password baru minimal 8 karakter.");
     }
-    if (newPassword !== confirmPassword) {
+    if (newPassword !== confirmNewPassword) {
       return setError("Konfirmasi password baru tidak sama.");
     }
     if (newPassword === currentPassword) {
       return setError("Password baru harus berbeda dari password saat ini.");
     }
 
-    setIsSaving(true);
+    setIsChangingPassword(true);
     setError("");
     setNotice("");
     try {
@@ -509,12 +511,12 @@ export default function AdminPage() {
 
       setCurrentPassword("");
       setNewPassword("");
-      setConfirmPassword("");
+      setConfirmNewPassword("");
       showResult("Password berhasil diubah.");
     } catch {
       setError("Password gagal diubah. Silakan coba lagi.");
     } finally {
-      setIsSaving(false);
+      setIsChangingPassword(false);
     }
   }
 
@@ -1246,6 +1248,83 @@ export default function AdminPage() {
           ))}
         </nav>
 
+        {activeTab === "settings" && (
+          <div className="space-y-6">
+            <SectionCard
+              title="Keamanan Akun Admin"
+              description="Kelola keamanan akun admin dan ubah password akun."
+            >
+              <form
+                onSubmit={changeAdminPassword}
+                className="grid gap-4 sm:grid-cols-2"
+              >
+                <label className="text-sm font-bold text-[#0F3854]">
+                  Password saat ini
+                  <input
+                    required
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    autoComplete="current-password"
+                    placeholder="Masukkan password saat ini"
+                    disabled={isChangingPassword}
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20 disabled:opacity-60"
+                  />
+                </label>
+
+                <div className="hidden sm:block" aria-hidden="true" />
+
+                <label className="text-sm font-bold text-[#0F3854]">
+                  Password baru
+                  <input
+                    required
+                    minLength={8}
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="Minimal 8 karakter"
+                    disabled={isChangingPassword}
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20 disabled:opacity-60"
+                  />
+                </label>
+
+                <label className="text-sm font-bold text-[#0F3854]">
+                  Konfirmasi password baru
+                  <input
+                    required
+                    minLength={8}
+                    type="password"
+                    value={confirmNewPassword}
+                    onChange={(event) =>
+                      setConfirmNewPassword(event.target.value)
+                    }
+                    autoComplete="new-password"
+                    placeholder="Ulangi password baru"
+                    disabled={isChangingPassword}
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20 disabled:opacity-60"
+                  />
+                </label>
+
+                <div className="flex items-end sm:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={isChangingPassword}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isChangingPassword ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <LockKeyhole className="h-4 w-4" />
+                    )}
+                    {isChangingPassword ? "Mengubah..." : "Change Password"}
+                  </button>
+                </div>
+              </form>
+            </SectionCard>
+          </div>
+        )}
+
         {activeTab === "shipments" && (
           <div className="space-y-6">
             <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -1920,67 +1999,6 @@ export default function AdminPage() {
           </SectionCard>
         )}
         {activeTab === "preorder" && <PreorderManager />}
-        {activeTab === "settings" && (
-          <SectionCard
-            title="Keamanan Akun"
-            description="Kelola keamanan akun admin dan ubah password akun."
-          >
-            <form
-              onSubmit={(event) => void changePassword(event)}
-              className="grid gap-4 sm:grid-cols-2"
-            >
-              <label className="text-sm font-bold text-[#0F3854]">
-                Password saat ini
-                <input
-                  required
-                  type="password"
-                  autoComplete="current-password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
-                  disabled={isSaving}
-                />
-              </label>
-              <label className="text-sm font-bold text-[#0F3854]">
-                Password baru
-                <input
-                  required
-                  type="password"
-                  minLength={8}
-                  autoComplete="new-password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
-                  disabled={isSaving}
-                />
-              </label>
-              <label className="text-sm font-bold text-[#0F3854]">
-                Konfirmasi password baru
-                <input
-                  required
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
-                  disabled={isSaving}
-                />
-              </label>
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  Change Password
-                </button>
-              </div>
-            </form>
-          </SectionCard>
-        )}
         {isLoading && (
           <div className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white shadow-xl">
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat data
