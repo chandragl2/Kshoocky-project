@@ -12,6 +12,7 @@ import {
   ClipboardList,
   ImagePlus,
   Loader2,
+  LockKeyhole,
   Package,
   Plus,
   RefreshCw,
@@ -310,6 +311,10 @@ export default function AdminPage() {
   const [productIsFeatured, setProductIsFeatured] = useState(false);
   const [isCatalog, setIsCatalog] = useState(true);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -459,6 +464,68 @@ export default function AdminPage() {
     setNotice(message);
     setError("");
     window.setTimeout(() => setNotice(""), 3500);
+  }
+
+  async function changeAdminPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      setError("Semua kolom password wajib diisi.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Password baru minimal 8 karakter.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setError("Konfirmasi password baru tidak cocok.");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setError("Password baru harus berbeda dari password saat ini.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user?.email) {
+        throw userError ?? new Error("Admin session tidak ditemukan.");
+      }
+
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (reauthError) {
+        setError("Password saat ini salah.");
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) throw updateError;
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      showResult("Password admin berhasil diubah.");
+    } catch {
+      setError("Password gagal diubah. Silakan coba lagi.");
+    } finally {
+      setIsChangingPassword(false);
+    }
   }
 
   async function addShipment(event: FormEvent<HTMLFormElement>) {
@@ -1190,6 +1257,74 @@ export default function AdminPage() {
               </button>
             ))}
         </nav>
+
+        <SectionCard
+          title="Keamanan Akun Admin"
+          description="Ganti password akun admin tanpa mengubah role atau data profil."
+        >
+          <form onSubmit={changeAdminPassword} className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-bold text-[#0F3854]">
+              Password saat ini
+              <input
+                required
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+                placeholder="Masukkan password saat ini"
+                disabled={isChangingPassword}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20 disabled:opacity-60"
+              />
+            </label>
+
+            <div className="hidden sm:block" aria-hidden="true" />
+
+            <label className="text-sm font-bold text-[#0F3854]">
+              Password baru
+              <input
+                required
+                minLength={8}
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                autoComplete="new-password"
+                placeholder="Minimal 8 karakter"
+                disabled={isChangingPassword}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20 disabled:opacity-60"
+              />
+            </label>
+
+            <label className="text-sm font-bold text-[#0F3854]">
+              Konfirmasi password baru
+              <input
+                required
+                minLength={8}
+                type="password"
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                autoComplete="new-password"
+                placeholder="Ulangi password baru"
+                disabled={isChangingPassword}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20 disabled:opacity-60"
+              />
+            </label>
+
+            <div className="flex items-end sm:col-span-2">
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isChangingPassword ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LockKeyhole className="h-4 w-4" />
+                )}
+                {isChangingPassword ? "Mengubah..." : "Change Password"}
+              </button>
+            </div>
+          </form>
+        </SectionCard>
 
         {activeTab === "shipments" && (
           <div className="space-y-6">
