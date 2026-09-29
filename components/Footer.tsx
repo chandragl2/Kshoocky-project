@@ -57,14 +57,6 @@ export default function Footer() {
                 Forwarding Korea - ID
               </Link>
             </li>
-            <li>
-              <Link
-                href="/tracking"
-                className="hover:text-white transition-colors"
-              >
-                Tracking Paket
-              </Link>
-            </li>
           </ul>
         </div>
 

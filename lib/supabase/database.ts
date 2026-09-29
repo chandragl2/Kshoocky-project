@@ -559,6 +559,124 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      admin_add_preorder_product: {
+        Args: {
+          p_event_id: string;
+          p_product_id: string;
+          p_preorder_price: number;
+          p_preorder_stock: number;
+        };
+        Returns: string;
+      };
+      admin_create_preorder_event: {
+        Args: {
+          p_title: string;
+          p_slug: string;
+          p_description: string | null;
+          p_cover_image_url: string | null;
+          p_starts_at: string | null;
+          p_ends_at: string | null;
+          p_status: PreorderEventStatus;
+        };
+        Returns: Database["public"]["Tables"]["preorder_events"]["Row"];
+      };
+      admin_delete_preorder_event: {
+        Args: { p_event_id: string };
+        Returns: string;
+      };
+      admin_delete_preorder_product: {
+        Args: { p_event_product_id: string; p_event_id: string };
+        Returns: string;
+      };
+      admin_update_preorder_event: {
+        Args: {
+          p_event_id: string;
+          p_title: string;
+          p_slug: string;
+          p_description: string | null;
+          p_cover_image_url: string | null;
+          p_starts_at: string | null;
+          p_ends_at: string | null;
+          p_status: PreorderEventStatus;
+        };
+        Returns: Database["public"]["Tables"]["preorder_events"]["Row"];
+      };
+      admin_update_preorder_product: {
+        Args: {
+          p_event_product_id: string;
+          p_event_id: string;
+          p_preorder_price: number;
+          p_preorder_stock: number;
+        };
+        Returns: string;
+      };
+      admin_add_product_image: {
+        Args: {
+          p_product_id: string;
+          p_image_url: string;
+          p_is_primary: boolean;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_create_product: {
+        Args: {
+          p_title: string;
+          p_description: string | null;
+          p_category: string;
+          p_price: number;
+          p_stock: number;
+          p_image_url: string | null;
+          p_is_catalog: boolean;
+          p_status: ProductStatus;
+          p_is_featured: boolean;
+          p_slug: string;
+        };
+        Returns: string;
+      };
+      admin_delete_product: {
+        Args: { p_product_id: string };
+        Returns: string;
+      };
+      admin_delete_product_image: {
+        Args: { p_product_id: string; p_image_id: string };
+        Returns: string;
+      };
+      admin_set_primary_product_image: {
+        Args: { p_product_id: string; p_image_id: string };
+        Returns: string;
+      };
+      admin_update_product: {
+        Args: {
+          p_product_id: string;
+          p_title: string;
+          p_description: string | null;
+          p_category: string;
+          p_price: number;
+          p_stock: number;
+          p_image_url: string | null;
+          p_is_catalog: boolean;
+          p_status: ProductStatus;
+          p_is_featured: boolean;
+        };
+        Returns: string;
+      };
+      admin_update_product_image_sort_order: {
+        Args: {
+          p_product_id: string;
+          p_image_id: string;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_update_product_status: {
+        Args: { p_product_id: string; p_status: ProductStatus };
+        Returns: string;
+      };
+      admin_update_order_status: {
+        Args: { p_order_id: string; p_order_status: string };
+        Returns: undefined;
+      };
       checkout_catalog: {
         Args: { p_address_id: string };
         Returns: string;

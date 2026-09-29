@@ -30,7 +30,7 @@ const panelCopy: Record<PanelVariant, { title: string; subtitle: string }> = {
   },
   billing: {
     title: "Invoices",
-    subtitle: "Lihat invoice proxy dan biaya pengiriman.",
+    subtitle: "Lihat invoice transaksi kamu.",
   },
   refund: {
     title: "Balance & Withdrawal",
@@ -161,7 +161,7 @@ export default function UserWorkspacePanel({
   if (variant === "billing") {
     return (
       <PageFrame title={copy.title} subtitle={copy.subtitle}>
-        <Tabs items={["Proxy Invoices (0)", "Shipping Invoices (0)"]} />
+        <Tabs items={["Proxy Invoices (0)"]} />
         <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="hidden grid-cols-5 gap-4 border-b border-slate-100 px-5 py-4 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 sm:grid">
             <span>Invoice number</span>

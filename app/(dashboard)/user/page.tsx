@@ -6,7 +6,6 @@ import {
   Info,
   Package,
   Plane,
-  Truck,
 } from "lucide-react";
 
 const summaryCards = [
@@ -27,16 +26,8 @@ const summaryCards = [
     statuses: ["0 Expected", "0 Arrived"],
   },
   {
-    title: "Shipments",
-    description: "Paket dalam perjalanan",
-    value: "0",
-    icon: Truck,
-    iconClass: "bg-[#edf9f5] text-[#3e9d8b]",
-    statuses: ["Active"],
-  },
-  {
     title: "Unpaid Bills",
-    description: "Tagihan pelunasan & ongkir",
+    description: "Tagihan pembayaran pesanan",
     value: "0",
     icon: Bell,
     iconClass: "bg-[#fff5d8] text-[#c48a24]",
@@ -56,7 +47,7 @@ export default function UserDashboardPage() {
             Ringkasan aktivitasmu
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Pantau pesanan, forwarding, dan pengirimanmu di satu tempat.
+            Pantau pesanan dan aktivitasmu di satu tempat.
           </p>
         </div>
         <Link
@@ -114,7 +105,7 @@ export default function UserDashboardPage() {
           </h2>
           <CheckCircle2 className="h-5 w-5 text-[#3e9d8b]" />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {summaryCards.map(
             ({
               title,

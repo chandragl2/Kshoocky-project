@@ -414,22 +414,31 @@ export default function PreorderManager() {
         title,
         slug,
         description: eventForm.description.trim() || null,
+        cover_image_url: eventForm.cover_image_url.trim() || null,
         starts_at: toDateTimeValue(eventForm.starts_at),
         ends_at: toDateTimeValue(eventForm.ends_at),
         status: eventForm.status,
       };
       const result = activeEventId
-        ? await supabase
-            .from("preorder_events")
-            .update(values)
-            .eq("id", activeEventId)
-            .select("*")
-            .single()
-        : await supabase
-            .from("preorder_events")
-            .insert({ ...values, cover_image_url: null })
-            .select("*")
-            .single();
+        ? await supabase.rpc("admin_update_preorder_event", {
+            p_event_id: activeEventId,
+            p_title: values.title,
+            p_slug: values.slug,
+            p_description: values.description,
+            p_cover_image_url: values.cover_image_url,
+            p_starts_at: values.starts_at,
+            p_ends_at: values.ends_at,
+            p_status: values.status,
+          })
+        : await supabase.rpc("admin_create_preorder_event", {
+            p_title: values.title,
+            p_slug: values.slug,
+            p_description: values.description,
+            p_cover_image_url: null,
+            p_starts_at: values.starts_at,
+            p_ends_at: values.ends_at,
+            p_status: values.status,
+          });
       if (result.error) {
         if (result.error.code === "23505") {
           setError("Slug tersebut sudah digunakan event lain.");
@@ -458,12 +467,17 @@ export default function PreorderManager() {
           savedEventId,
           coverFile,
         );
-        const { data: coverUpdate, error: coverUpdateError } = await supabase
-          .from("preorder_events")
-          .update({ cover_image_url: publicUrl })
-          .eq("id", savedEventId)
-          .select("id")
-          .maybeSingle();
+        const { data: coverUpdate, error: coverUpdateError } =
+          await supabase.rpc("admin_update_preorder_event", {
+            p_event_id: savedEventId,
+            p_title: values.title,
+            p_slug: values.slug,
+            p_description: values.description,
+            p_cover_image_url: publicUrl,
+            p_starts_at: values.starts_at,
+            p_ends_at: values.ends_at,
+            p_status: values.status,
+          });
         if (coverUpdateError || !coverUpdate) {
           throw new CoverUploadError("save-url");
         }
@@ -518,12 +532,10 @@ export default function PreorderManager() {
     setNotice("");
     try {
       await requireAdmin(supabase);
-      const { data, error: deleteError } = await supabase
-        .from("preorder_events")
-        .delete()
-        .eq("id", event.id)
-        .select("id")
-        .maybeSingle();
+      const { data, error: deleteError } = await supabase.rpc(
+        "admin_delete_preorder_event",
+        { p_event_id: event.id },
+      );
       if (deleteError || !data) throw new Error("delete");
       if (activeEventId === event.id) {
         setActiveEventId(null);
@@ -575,14 +587,15 @@ export default function PreorderManager() {
     setNotice("");
     try {
       await requireAdmin(supabase);
-      const { error: insertError } = await supabase
-        .from("preorder_event_products")
-        .insert({
-          event_id: activeEventId,
-          product_id: newProductId,
-          preorder_price: price,
-          preorder_stock: stock,
-        });
+      const { error: insertError } = await supabase.rpc(
+        "admin_add_preorder_product",
+        {
+          p_event_id: activeEventId,
+          p_product_id: newProductId,
+          p_preorder_price: price,
+          p_preorder_stock: stock,
+        },
+      );
       if (insertError) {
         if (insertError.code === "23505") {
           setError("Produk tersebut sudah ada di event ini.");
@@ -626,13 +639,15 @@ export default function PreorderManager() {
     setNotice("");
     try {
       await requireAdmin(supabase);
-      const { data, error: updateError } = await supabase
-        .from("preorder_event_products")
-        .update({ preorder_price: price, preorder_stock: stock })
-        .eq("id", item.id)
-        .eq("event_id", item.event_id)
-        .select("id")
-        .maybeSingle();
+      const { data, error: updateError } = await supabase.rpc(
+        "admin_update_preorder_product",
+        {
+          p_event_product_id: item.id,
+          p_event_id: item.event_id,
+          p_preorder_price: price,
+          p_preorder_stock: stock,
+        },
+      );
       if (updateError || !data) throw new Error("update");
       await loadEventProducts(item.event_id);
       showSuccess("Produk preorder berhasil diperbarui.");
@@ -650,13 +665,13 @@ export default function PreorderManager() {
     setNotice("");
     try {
       await requireAdmin(supabase);
-      const { data, error: deleteError } = await supabase
-        .from("preorder_event_products")
-        .delete()
-        .eq("id", item.id)
-        .eq("event_id", item.event_id)
-        .select("id")
-        .maybeSingle();
+      const { data, error: deleteError } = await supabase.rpc(
+        "admin_delete_preorder_product",
+        {
+          p_event_product_id: item.id,
+          p_event_id: item.event_id,
+        },
+      );
       if (deleteError || !data) throw new Error("delete");
       await loadEventProducts(item.event_id);
       await refreshData();

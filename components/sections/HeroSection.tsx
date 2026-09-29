@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
 import TestimonialCard from "./TestimonialCard";
 
 export default function HeroSection() {
@@ -49,13 +48,6 @@ export default function HeroSection() {
               className="bg-[#3C7B9E] hover:bg-[#2f627d] text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-[#3C7B9E]/30"
             >
               Daftar Sekarang — Gratis! →
-            </Link>
-            <Link
-              href="/tracking"
-              className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center gap-2"
-            >
-              <Search className="w-4 h-4" />
-              Lacak Pesanan
             </Link>
           </div>
         </div>

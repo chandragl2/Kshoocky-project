@@ -18,7 +18,6 @@ import {
   Settings,
   ShoppingBag,
   ShoppingCart,
-  Truck,
   UserRound,
   WalletCards,
   X,
@@ -32,9 +31,7 @@ const workspaceLinks = [
   { label: "Overview", href: "/user", icon: Home },
   { label: "Keranjang", href: "/user/cart", icon: ShoppingCart },
   { label: "My Orders", href: "/user/orders", icon: ShoppingBag },
-  { label: "My Shipments", href: "/user/shipments", icon: Truck },
   { label: "Catalog Orders", href: "/user/catalog", icon: BookOpen },
-  { label: "Manifest Schedule", href: "/user/manifest", icon: MapPin },
 ];
 
 const accountLinks = [

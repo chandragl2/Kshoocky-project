@@ -44,12 +44,6 @@ export default function Navbar() {
               Pre Order
             </Link>
             <Link
-              href="/tracking"
-              className="hover:text-[#2563eb] transition-colors"
-            >
-              Pelacakan
-            </Link>
-            <Link
               href="/catalog"
               className="hover:text-[#2563eb] transition-colors"
             >
@@ -143,13 +137,6 @@ export default function Navbar() {
               className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
             >
               Pre Order
-            </Link>
-            <Link
-              href="/tracking"
-              onClick={closeMenu}
-              className="rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
-            >
-              Pelacakan
             </Link>
             <Link
               href="/catalog"

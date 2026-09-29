@@ -190,18 +190,35 @@ function productSlugBase(title: string) {
 
 async function insertProductWithUniqueSlug(
   client: ReturnType<typeof createClient>,
-  product: Omit<Database["public"]["Tables"]["products"]["Insert"], "slug">,
+  product: {
+    title: string;
+    description: string | null;
+    category: string;
+    price: number;
+    stock: number;
+    image_url: string | null;
+    is_catalog: boolean;
+    status: ProductStatus;
+    is_featured: boolean;
+  },
   title: string,
 ) {
   const baseSlug = productSlugBase(title);
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-    const { data, error } = await client
-      .from("products")
-      .insert({ ...product, slug })
-      .select("id")
-      .single();
-    if (!error) return data.id;
+    const { data, error } = await client.rpc("admin_create_product", {
+      p_title: product.title,
+      p_description: product.description,
+      p_category: product.category,
+      p_price: product.price,
+      p_stock: product.stock,
+      p_image_url: product.image_url,
+      p_is_catalog: product.is_catalog,
+      p_status: product.status,
+      p_is_featured: product.is_featured,
+      p_slug: slug,
+    });
+    if (!error) return data;
     if (error.code !== "23505") throw error;
   }
   throw new DuplicateProductSlugError();
@@ -259,7 +276,7 @@ export default function AdminPage() {
   const [supabase] = useState(() =>
     isSupabaseConfigured ? createClient() : null,
   );
-  const [activeTab, setActiveTab] = useState<Tab>("shipments");
+  const [activeTab, setActiveTab] = useState<Tab>("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -370,11 +387,13 @@ export default function AdminPage() {
           const primaryFallbackIds = new Set<string>();
           for (const group of Array.from(imageGroups.values())) {
             if (!group.some((image) => image.is_primary) && group[0]) {
-              const { error: primaryError } = await supabase
-                .from("product_images")
-                .update({ is_primary: true })
-                .eq("product_id", group[0].product_id)
-                .eq("id", group[0].id);
+              const { error: primaryError } = await supabase.rpc(
+                "admin_set_primary_product_image",
+                {
+                  p_product_id: group[0].product_id,
+                  p_image_id: group[0].id,
+                },
+              );
               if (!primaryError) primaryFallbackIds.add(group[0].id);
             }
           }
@@ -676,31 +695,33 @@ export default function AdminPage() {
         if (uploadError) throw uploadError;
         uploadedPaths.push(path);
 
-        const { data: imageRow, error: insertError } = await supabase
-          .from("product_images")
-          .insert({
-            product_id: productId,
-            image_url: supabase.storage
+        const { data: imageId, error: insertError } = await supabase.rpc(
+          "admin_add_product_image",
+          {
+            p_product_id: productId,
+            p_image_url: supabase.storage
               .from(productImageBucket)
               .getPublicUrl(path).data.publicUrl,
-            is_primary: !hasPrimary && index === 0,
-            sort_order: nextSortOrder,
-          })
-          .select("id")
-          .single();
+            p_is_primary: !hasPrimary && index === 0,
+            p_sort_order: nextSortOrder,
+          },
+        );
         if (insertError) throw insertError;
-        insertedIds.push(imageRow.id);
+        insertedIds.push(imageId);
         nextSortOrder += 1;
       }
     } catch {
       let cleanupFailed = false;
       if (insertedIds.length > 0) {
-        const { error: recordsCleanupError } = await supabase
-          .from("product_images")
-          .delete()
-          .eq("product_id", productId)
-          .in("id", insertedIds);
-        cleanupFailed = Boolean(recordsCleanupError);
+        const cleanupResults = await Promise.all(
+          insertedIds.map((imageId) =>
+            supabase.rpc("admin_delete_product_image", {
+              p_product_id: productId,
+              p_image_id: imageId,
+            }),
+          ),
+        );
+        cleanupFailed = cleanupResults.some((result) => result.error);
       }
       if (!cleanupFailed && uploadedPaths.length > 0) {
         const { error: filesCleanupError } = await supabase.storage
@@ -722,30 +743,11 @@ export default function AdminPage() {
     );
     if (previousPrimary?.id === imageId) return;
 
-    const { error: clearError } = await supabase
-      .from("product_images")
-      .update({ is_primary: false })
-      .eq("product_id", productId)
-      .neq("id", imageId);
-    if (clearError) throw clearError;
-
-    const { data, error: primaryError } = await supabase
-      .from("product_images")
-      .update({ is_primary: true })
-      .eq("product_id", productId)
-      .eq("id", imageId)
-      .select("id")
-      .maybeSingle();
-    if (primaryError || !data) {
-      if (previousPrimary) {
-        await supabase
-          .from("product_images")
-          .update({ is_primary: true })
-          .eq("product_id", productId)
-          .eq("id", previousPrimary.id);
-      }
-      throw primaryError ?? new Error("Foto tidak ditemukan.");
-    }
+    const { error: primaryError } = await supabase.rpc(
+      "admin_set_primary_product_image",
+      { p_product_id: productId, p_image_id: imageId },
+    );
+    if (primaryError) throw primaryError;
 
     setProductImages((images) =>
       images.map((image) =>
@@ -809,13 +811,10 @@ export default function AdminPage() {
         }
       }
 
-      const { data, error: recordError } = await supabase
-        .from("product_images")
-        .delete()
-        .eq("product_id", image.product_id)
-        .eq("id", image.id)
-        .select("id")
-        .maybeSingle();
+      const { data, error: recordError } = await supabase.rpc(
+        "admin_delete_product_image",
+        { p_product_id: image.product_id, p_image_id: image.id },
+      );
       if (recordError || !data) {
         setError(
           storagePath
@@ -878,16 +877,16 @@ export default function AdminPage() {
         return;
       }
       const [currentResult, targetResult] = await Promise.all([
-        supabase
-          .from("product_images")
-          .update({ sort_order: target.sort_order })
-          .eq("product_id", image.product_id)
-          .eq("id", current.id),
-        supabase
-          .from("product_images")
-          .update({ sort_order: current.sort_order })
-          .eq("product_id", image.product_id)
-          .eq("id", target.id),
+        supabase.rpc("admin_update_product_image_sort_order", {
+          p_product_id: image.product_id,
+          p_image_id: current.id,
+          p_sort_order: target.sort_order,
+        }),
+        supabase.rpc("admin_update_product_image_sort_order", {
+          p_product_id: image.product_id,
+          p_image_id: target.id,
+          p_sort_order: current.sort_order,
+        }),
       ]);
       if (currentResult.error || targetResult.error) {
         await loadData();
@@ -956,12 +955,21 @@ export default function AdminPage() {
       };
 
       if (editingProductId) {
-        const { data, error: updateError } = await supabase
-          .from("products")
-          .update(values)
-          .eq("id", editingProductId)
-          .select("id")
-          .maybeSingle();
+        const { data, error: updateError } = await supabase.rpc(
+          "admin_update_product",
+          {
+            p_product_id: editingProductId,
+            p_title: values.title,
+            p_description: values.description,
+            p_category: values.category,
+            p_price: values.price,
+            p_stock: values.stock,
+            p_image_url: values.image_url,
+            p_is_catalog: values.is_catalog,
+            p_status: values.status,
+            p_is_featured: values.is_featured,
+          },
+        );
         if (updateError) throw updateError;
         if (!data) throw new Error("product-not-found");
       } else {
@@ -1035,12 +1043,10 @@ export default function AdminPage() {
         setError("Halaman ini hanya dapat diakses oleh admin.");
         return;
       }
-      const { data, error: updateError } = await supabase
-        .from("products")
-        .update({ status })
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
+      const { data, error: updateError } = await supabase.rpc(
+        "admin_update_product_status",
+        { p_product_id: id, p_status: status },
+      );
       if (updateError || !data) throw new Error("status-update");
       setProducts((items) =>
         items.map((item) => (item.id === id ? { ...item, status } : item)),
@@ -1073,12 +1079,10 @@ export default function AdminPage() {
         setError("Halaman ini hanya dapat diakses oleh admin.");
         return;
       }
-      const { data, error: deleteError } = await supabase
-        .from("products")
-        .delete()
-        .eq("id", product.id)
-        .select("id")
-        .maybeSingle();
+      const { data, error: deleteError } = await supabase.rpc(
+        "admin_delete_product",
+        { p_product_id: product.id },
+      );
       if (deleteError?.code === "23503") {
         setError(
           "Produk tidak dapat dihapus karena masih digunakan pada data lain.",
@@ -1141,8 +1145,7 @@ export default function AdminPage() {
               Admin Control Room
             </h1>
             <p className="mt-2 max-w-xl text-sm text-slate-500">
-              Kelola perjalanan paket, katalog PO, dan verifikasi pembayaran
-              dari satu ruang kerja.
+              Kelola katalog PO dan verifikasi pembayaran dari satu ruang kerja.
             </p>
           </div>
           <button
@@ -1171,19 +1174,21 @@ export default function AdminPage() {
         )}
 
         <nav
-          className="mb-8 grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 xl:grid-cols-4"
+          className="mb-8 grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 xl:grid-cols-3"
           aria-label="Admin features"
         >
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActiveTab(id)}
-              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold transition ${activeTab === id ? "bg-[#0F3854] text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-[#0F3854]"}`}
-            >
-              <Icon className="h-4 w-4" /> {label}
-            </button>
-          ))}
+          {tabs
+            .filter(({ id }) => id !== "shipments")
+            .map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold transition ${activeTab === id ? "bg-[#0F3854] text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-[#0F3854]"}`}
+              >
+                <Icon className="h-4 w-4" /> {label}
+              </button>
+            ))}
         </nav>
 
         {activeTab === "shipments" && (

@@ -218,16 +218,14 @@ export default function AdminOrderDetails() {
         throw new Error("not-admin");
       }
 
-      const { data, error: updateError } = await supabase
-        .from("orders")
-        .update({
-          order_status: nextStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", order.id)
-        .select("id")
-        .maybeSingle();
-      if (updateError || !data) throw new Error("update-failed");
+      const { error: updateError } = await supabase.rpc(
+        "admin_update_order_status",
+        {
+          p_order_id: order.id,
+          p_order_status: nextStatus,
+        },
+      );
+      if (updateError) throw new Error("update-failed");
 
       setNotice("Status pesanan berhasil diperbarui.");
       await loadOrder();
@@ -237,7 +235,6 @@ export default function AdminOrderDetails() {
       setIsSaving(false);
     }
   }
-
   const address = order ? parseAddress(order.shipping_address) : null;
   const addressParts = address
     ? [
