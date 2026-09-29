@@ -7,6 +7,29 @@ import { useState } from "react";
 import { User, Mail, Phone, Lock, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
+const emailPattern =
+  /^[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?\.)+[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?$/i;
+const disposableEmailDomains = new Set([
+  "10minutemail.com",
+  "10minutemail.net",
+  "dispostable.com",
+  "getnada.com",
+  "grr.la",
+  "guerrillamail.com",
+  "guerrillamail.de",
+  "guerrillamail.net",
+  "maildrop.cc",
+  "mailinator.com",
+  "sharklasers.com",
+  "temp-mail.org",
+  "temp-mail.io",
+  "tempmail.com",
+  "throwaway.email",
+  "throwawaymail.com",
+  "yopmail.com",
+  "yopmail.fr",
+]);
+
 export default function RegisterPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
@@ -20,39 +43,65 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{
+    fullName?: string;
+    email?: string;
+    whatsapp?: string;
+    password?: string;
+    confirmPassword?: string;
+    termsAccepted?: string;
+  }>({});
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
-
-    if (
-      !fullName.trim() ||
-      !email.trim() ||
-      !whatsapp.trim() ||
-      !password ||
-      !confirmPassword
-    ) {
-      setFormError("Mohon lengkapi semua data yang diperlukan.");
-      return;
+    setFieldErrors({});
+    setSuccessMessage("");
+    const normalizedEmail = email.trim().toLowerCase();
+    const nextFieldErrors: typeof fieldErrors = {};
+    if (!fullName.trim()) {
+      nextFieldErrors.fullName = "Nama lengkap wajib diisi.";
     }
-
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setFormError("Email tidak valid.");
-      return;
+    if (!normalizedEmail) {
+      nextFieldErrors.email = "Email wajib diisi.";
+    } else if (!emailPattern.test(normalizedEmail)) {
+      nextFieldErrors.email = "Masukkan alamat email yang valid.";
+    } else {
+      const emailDomain = normalizedEmail.split("@")[1];
+      if (
+        Array.from(disposableEmailDomains).some(
+          (domain) =>
+            emailDomain === domain || emailDomain.endsWith(`.${domain}`),
+        )
+      ) {
+        nextFieldErrors.email =
+          "Email ini menggunakan domain sementara dan tidak dapat digunakan.";
+      }
     }
-
-    if (password.length < 8) {
-      setFormError("Kata sandi minimal 8 karakter.");
-      return;
+    if (!whatsapp.trim()) {
+      nextFieldErrors.whatsapp = "Nomor WhatsApp wajib diisi.";
     }
-
-    if (password !== confirmPassword) {
-      setFormError("Kata sandi tidak cocok.");
-      return;
+    if (!password.trim()) {
+      nextFieldErrors.password =
+        "Password wajib diisi dan tidak boleh hanya spasi.";
+    } else if (password.length < 8) {
+      nextFieldErrors.password = "Password minimal 8 karakter.";
+    } else if (password.toLowerCase() === normalizedEmail) {
+      nextFieldErrors.password = "Password tidak boleh sama dengan email.";
     }
-
+    if (!confirmPassword) {
+      nextFieldErrors.confirmPassword = "Konfirmasi password wajib diisi.";
+    } else if (password !== confirmPassword) {
+      nextFieldErrors.confirmPassword =
+        "Password dan konfirmasi password tidak sama.";
+    }
     if (!termsAccepted) {
-      setFormError("Silakan setujui Syarat & Ketentuan dan Kebijakan Privasi.");
+      nextFieldErrors.termsAccepted = "Silakan setujui syarat dan ketentuan.";
+    }
+
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFormError("Periksa kembali data yang kamu masukkan.");
       return;
     }
 
@@ -61,7 +110,7 @@ export default function RegisterPage() {
     try {
       const supabase = createClient();
       const signUpResult = supabase.auth.signUp({
-        email: email.trim(),
+        email: normalizedEmail,
         password,
       });
       const timeout = new Promise<never>((_, reject) => {
@@ -76,12 +125,28 @@ export default function RegisterPage() {
           normalizedMessage.includes("already registered") ||
           normalizedMessage.includes("already exists")
         ) {
-          setFormError("Email sudah terdaftar.");
+          const message =
+            "Email sudah terdaftar. Silakan login atau gunakan email lain.";
+          setFieldErrors({
+            email: message,
+          });
+          setFormError(message);
         } else if (normalizedMessage.includes("invalid email")) {
-          setFormError("Email tidak valid.");
+          const message = "Masukkan alamat email yang valid.";
+          setFieldErrors({ email: message });
+          setFormError(message);
+        } else if (
+          error.status === 429 ||
+          normalizedMessage.includes("rate limit") ||
+          normalizedMessage.includes("rate_limit") ||
+          normalizedMessage.includes("too many") ||
+          normalizedMessage.includes("security purposes") ||
+          normalizedMessage.includes("429")
+        ) {
+          setFormError("Terlalu banyak percobaan. Silakan coba lagi nanti.");
         } else {
           setFormError(
-            "Terjadi kesalahan saat membuat akun. Silakan coba lagi.",
+            "Pendaftaran gagal. Silakan periksa data dan coba lagi.",
           );
         }
         return;
@@ -101,7 +166,7 @@ export default function RegisterPage() {
           "Koneksi ke layanan pendaftaran terlalu lama. Periksa koneksi Anda lalu coba lagi.",
         );
       } else {
-        setFormError("Terjadi kesalahan saat membuat akun. Silakan coba lagi.");
+        setFormError("Pendaftaran gagal. Silakan periksa data dan coba lagi.");
       }
     } finally {
       setIsSubmitting(false);
@@ -154,7 +219,11 @@ export default function RegisterPage() {
             </Link>
           </div>
         ) : (
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={handleSubmit}
+            noValidate
+          >
             {/* Nama Lengkap */}
             <div>
               <label
@@ -168,13 +237,27 @@ export default function RegisterPage() {
                 <input
                   id="fullname"
                   type="text"
+                  required
                   placeholder="Nama Lengkap"
                   autoComplete="name"
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.fullName)}
+                  aria-describedby={
+                    fieldErrors.fullName ? "fullname-error" : undefined
+                  }
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
                 />
               </div>
+              {fieldErrors.fullName && (
+                <p
+                  id="fullname-error"
+                  className="mt-1.5 text-xs text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.fullName}
+                </p>
+              )}
             </div>
 
             {/* Email */}
@@ -190,13 +273,27 @@ export default function RegisterPage() {
                 <input
                   id="email"
                   type="email"
+                  required
                   placeholder="nama@email.com"
                   autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  aria-describedby={
+                    fieldErrors.email ? "email-error" : undefined
+                  }
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
                 />
               </div>
+              {fieldErrors.email && (
+                <p
+                  id="email-error"
+                  className="mt-1.5 text-xs text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             {/* Nomor WhatsApp */}
@@ -212,13 +309,27 @@ export default function RegisterPage() {
                 <input
                   id="whatsapp"
                   type="tel"
+                  required
                   placeholder="Contoh: 08123456789"
                   autoComplete="tel"
                   value={whatsapp}
                   onChange={(event) => setWhatsapp(event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.whatsapp)}
+                  aria-describedby={
+                    fieldErrors.whatsapp ? "whatsapp-error" : undefined
+                  }
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
                 />
               </div>
+              {fieldErrors.whatsapp && (
+                <p
+                  id="whatsapp-error"
+                  className="mt-1.5 text-xs text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.whatsapp}
+                </p>
+              )}
             </div>
 
             {/* Kata Sandi */}
@@ -234,10 +345,16 @@ export default function RegisterPage() {
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  required
+                  minLength={8}
                   placeholder="Masukkan kata sandi"
                   autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={
+                    fieldErrors.password ? "password-error" : undefined
+                  }
                   className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
                 />
                 <button
@@ -263,6 +380,15 @@ export default function RegisterPage() {
                   <span className="ml-2 font-semibold text-[#3C7B9E]">✓</span>
                 )}
               </p>
+              {fieldErrors.password && (
+                <p
+                  id="password-error"
+                  className="mt-1.5 text-xs text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.password}
+                </p>
+              )}
             </div>
 
             {/* Konfirmasi Kata Sandi */}
@@ -278,10 +404,17 @@ export default function RegisterPage() {
                 <input
                   id="confirm-password"
                   type={showConfirmPassword ? "text" : "password"}
+                  required
                   placeholder="Ulangi kata sandi"
                   autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                  aria-describedby={
+                    fieldErrors.confirmPassword
+                      ? "confirm-password-error"
+                      : undefined
+                  }
                   className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#0B1320] placeholder-gray-400 focus:outline-none focus:border-[#3C7B9E] focus:bg-white transition"
                 />
                 <button
@@ -306,6 +439,15 @@ export default function RegisterPage() {
                   ✓ Kata sandi cocok
                 </p>
               )}
+              {fieldErrors.confirmPassword && (
+                <p
+                  id="confirm-password-error"
+                  className="mt-1.5 text-xs text-red-600"
+                  role="alert"
+                >
+                  {fieldErrors.confirmPassword}
+                </p>
+              )}
             </div>
 
             {/* Terms Checkbox */}
@@ -313,8 +455,13 @@ export default function RegisterPage() {
               <input
                 type="checkbox"
                 id="terms"
+                required
                 checked={termsAccepted}
                 onChange={(event) => setTermsAccepted(event.target.checked)}
+                aria-invalid={Boolean(fieldErrors.termsAccepted)}
+                aria-describedby={
+                  fieldErrors.termsAccepted ? "terms-error" : undefined
+                }
                 className="w-4 h-4 mt-0.5 rounded accent-[#3C7B9E] flex-shrink-0"
               />
               <span>
@@ -335,11 +482,20 @@ export default function RegisterPage() {
                 KSHOOCKY.
               </span>
             </label>
+            {fieldErrors.termsAccepted && (
+              <p id="terms-error" className="text-xs text-red-600" role="alert">
+                {fieldErrors.termsAccepted}
+              </p>
+            )}
 
             {formError && (
-              <p className="text-sm leading-relaxed text-red-600" role="alert">
+              <div
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-relaxed text-red-700"
+                role="alert"
+                aria-live="assertive"
+              >
                 {formError}
-              </p>
+              </div>
             )}
 
             {/* Submit Button */}

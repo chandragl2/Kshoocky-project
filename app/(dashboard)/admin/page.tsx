@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings,
   ShoppingBag,
   Star,
   Truck,
@@ -25,7 +26,7 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database, ProductStatus } from "@/lib/supabase/database";
 import PreorderManager from "@/components/admin/PreorderManager";
 
-type Tab = "shipments" | "products" | "orders" | "preorder";
+type Tab = "shipments" | "products" | "orders" | "preorder" | "settings";
 type ShipmentStatus =
   | "SEOUL_WH"
   | "IN_TRANSIT"
@@ -81,6 +82,7 @@ const tabs = [
     icon: CircleDollarSign,
   },
   { id: "preorder" as const, label: "Event Preorder", icon: CalendarDays },
+  { id: "settings" as const, label: "Settings", icon: Settings },
 ];
 
 function formatCurrency(value: number | null | undefined) {
@@ -293,6 +295,9 @@ export default function AdminPage() {
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [search, setSearch] = useState("");
   const [shipmentOrderId, setShipmentOrderId] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
@@ -459,6 +464,58 @@ export default function AdminPage() {
     setNotice(message);
     setError("");
     window.setTimeout(() => setNotice(""), 3500);
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return setError("Supabase belum dikonfigurasi.");
+    if (isSaving) return;
+    if (newPassword.length < 8) {
+      return setError("Password baru minimal 8 karakter.");
+    }
+    if (newPassword !== confirmPassword) {
+      return setError("Konfirmasi password baru tidak sama.");
+    }
+    if (newPassword === currentPassword) {
+      return setError("Password baru harus berbeda dari password saat ini.");
+    }
+
+    setIsSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError || !user?.email) {
+        setError("Sesi admin tidak valid. Silakan login kembali.");
+        return;
+      }
+
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (reauthError) {
+        setError("Password saat ini salah.");
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateError) throw updateError;
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      showResult("Password berhasil diubah.");
+    } catch {
+      setError("Password gagal diubah. Silakan coba lagi.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function addShipment(event: FormEvent<HTMLFormElement>) {
@@ -1177,18 +1234,16 @@ export default function AdminPage() {
           className="mb-8 grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 xl:grid-cols-3"
           aria-label="Admin features"
         >
-          {tabs
-            .filter(({ id }) => id !== "shipments")
-            .map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold transition ${activeTab === id ? "bg-[#0F3854] text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-[#0F3854]"}`}
-              >
-                <Icon className="h-4 w-4" /> {label}
-              </button>
-            ))}
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold transition ${activeTab === id ? "bg-[#0F3854] text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-[#0F3854]"}`}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
         </nav>
 
         {activeTab === "shipments" && (
@@ -1865,6 +1920,67 @@ export default function AdminPage() {
           </SectionCard>
         )}
         {activeTab === "preorder" && <PreorderManager />}
+        {activeTab === "settings" && (
+          <SectionCard
+            title="Keamanan Akun"
+            description="Kelola keamanan akun admin dan ubah password akun."
+          >
+            <form
+              onSubmit={(event) => void changePassword(event)}
+              className="grid gap-4 sm:grid-cols-2"
+            >
+              <label className="text-sm font-bold text-[#0F3854]">
+                Password saat ini
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
+                  disabled={isSaving}
+                />
+              </label>
+              <label className="text-sm font-bold text-[#0F3854]">
+                Password baru
+                <input
+                  required
+                  type="password"
+                  minLength={8}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
+                  disabled={isSaving}
+                />
+              </label>
+              <label className="text-sm font-bold text-[#0F3854]">
+                Konfirmasi password baru
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#E5B869] focus:ring-2 focus:ring-[#E5B869]/20"
+                  disabled={isSaving}
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : null}
+                  Change Password
+                </button>
+              </div>
+            </form>
+          </SectionCard>
+        )}
         {isLoading && (
           <div className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white shadow-xl">
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat data
