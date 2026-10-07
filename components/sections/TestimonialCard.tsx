@@ -5,22 +5,28 @@ import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 
 const TESTIMONIALS = [
   {
-    name: "Nadia R.",
-    initials: "NR",
-    avatarClass: "bg-[#d9b39b] text-[#5f3e34]",
-    text: "Pelayanannya cepat dan barang sampai dengan aman. Trusted banget!",
+    name: "mitafibrianty",
+    initials: "MF",
+    avatarClass: "bg-[#2f3a2f] text-white",
+    text: "Akhirnya yang ditunggu-tunggu datang juga, bagus selalu bagus. Sayang-sayangku akhirnya mendarat dengan sempurna. Jastiper terbaik memang KSHOOCKY ini. Kaka KSHOOCKY-nya selalu ramah dan informatif, dan fast respon pokoknya.",
   },
   {
-    name: "Fajar H.",
-    initials: "FH",
-    avatarClass: "bg-[#b8c6d2] text-[#284052]",
-    text: "Jastip album K-Pop favoritku tanpa ribet. Pasti order lagi!",
+    name: "atanariel",
+    initials: "A",
+    avatarClass: "bg-[#d8b7e8] text-[#553b64]",
+    text: "Langganan group order album disini. Selalu satisfied. Packing aman, bubble wrap tebal & pengiriman Bandung - Jakarta cepet. Ga ada complain & bakal ikutan group order lg. Thanks kak 💜",
   },
   {
-    name: "Siti A.",
-    initials: "SA",
-    avatarClass: "bg-[#cfa88e] text-[#593c35]",
-    text: "Kirim kargo besar ke Indonesia lebih murah dan aman.",
+    name: "anggunndya._",
+    initials: "A",
+    avatarClass: "bg-[#f1d7bd] text-[#6b4a3a]",
+    text: "Paketnya sampai dengan selamat, cepet banget pula. KSHOOCKY emang seniat itu dari packing-nya yang super duper aman, tebel bubble wrap-nya oke banget, dan album-nya aman no damage 💗",
+  },
+  {
+    name: "azril131117",
+    initials: "A",
+    avatarClass: "bg-[#c9d7df] text-[#304754]",
+    text: "Selalu puas tiap jajan ke dia, pokoknya the best lah. Olshop ini harus semakin sukses. KSHOOCKY-nya baik, ramah, amanah dan freebies-nya cakep-cakep. Terimakasih!",
   },
 ];
 
