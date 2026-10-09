@@ -1207,16 +1207,25 @@ export default function AdminPage() {
               Kelola katalog PO dan verifikasi pembayaran dari satu ruang kerja.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-[#0F3854] shadow-sm transition hover:border-[#E5B869]"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-            />{" "}
-            Segarkan data
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/variants"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#174e70]"
+            >
+              <Package className="h-4 w-4" />
+              Kelola Varian
+            </Link>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-[#0F3854] shadow-sm transition hover:border-[#E5B869]"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+              />{" "}
+              Segarkan data
+            </button>
+          </div>
         </header>
 
         {(error || notice) && (
