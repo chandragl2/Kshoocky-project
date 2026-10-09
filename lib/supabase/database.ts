@@ -964,6 +964,32 @@ export interface Database {
         Args: { p_variant_id: string; p_option_value_ids: string[] };
         Returns: undefined;
       };
+      admin_create_product_variant_with_options: {
+        Args: {
+          p_product_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+          p_option_value_ids: string[];
+        };
+        Returns: string;
+      };
+      admin_update_product_variant_with_options: {
+        Args: {
+          p_variant_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+          p_option_value_ids: string[];
+        };
+        Returns: string;
+      };
       cart_add_variant: {
         Args: { p_product_id: string; p_variant_id: string; p_quantity: number };
         Returns: string;
