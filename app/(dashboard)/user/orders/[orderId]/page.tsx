@@ -11,7 +11,14 @@ import type { Database, Json } from "@/lib/supabase/database";
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type OrderItem = Pick<
   Database["public"]["Tables"]["order_items"]["Row"],
-  "id" | "product_title" | "quantity" | "unit_price" | "subtotal"
+  | "id"
+  | "product_title"
+  | "quantity"
+  | "unit_price"
+  | "subtotal"
+  | "variant_sku_snapshot"
+  | "variant_label_snapshot"
+  | "variant_options_snapshot"
 >;
 type ShippingAddress = {
   label?: string;
@@ -129,7 +136,7 @@ export default function OrderResultPage() {
 
         const { data: itemData, error: itemsError } = await supabase
           .from("order_items")
-          .select("id, product_title, quantity, unit_price, subtotal")
+          .select("id, product_title, quantity, unit_price, subtotal, variant_sku_snapshot, variant_label_snapshot, variant_options_snapshot")
           .eq("order_id", orderData.id)
           .order("created_at", { ascending: true });
         if (itemsError) throw itemsError;
@@ -252,6 +259,30 @@ export default function OrderResultPage() {
                           <h3 className="break-words text-sm font-bold text-slate-800">
                             {item.product_title}
                           </h3>
+                          {item.variant_label_snapshot && item.variant_label_snapshot !== "Default" && (
+                            <p className="mt-1 text-xs font-semibold text-slate-600">
+                              Varian: {item.variant_label_snapshot}
+                            </p>
+                          )}
+                          {item.variant_sku_snapshot && (
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              SKU: {item.variant_sku_snapshot}
+                            </p>
+                          )}
+                          {Array.isArray(item.variant_options_snapshot) &&
+                            item.variant_options_snapshot.length > 0 && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {item.variant_options_snapshot
+                                  .map((option) => {
+                                    if (!isRecord(option)) return "";
+                                    const group = stringValue(option.group);
+                                    const value = stringValue(option.value);
+                                    return group && value ? `${group}: ${value}` : value;
+                                  })
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            )}
                           <p className="mt-1 text-xs text-slate-500">
                             {item.quantity} × {formatCurrency(item.unit_price)}
                           </p>
