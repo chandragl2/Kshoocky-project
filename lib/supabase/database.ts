@@ -919,6 +919,71 @@ export interface Database {
         Args: { p_order_id: string; p_order_status: string };
         Returns: undefined;
       };
+      admin_create_product_option_group: {
+        Args: {
+          p_product_id: string;
+          p_name: string;
+          p_is_required: boolean;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_create_product_option_value: {
+        Args: {
+          p_option_group_id: string;
+          p_value: string;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_create_product_variant: {
+        Args: {
+          p_product_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+        };
+        Returns: string;
+      };
+      admin_update_product_variant: {
+        Args: {
+          p_variant_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+        };
+        Returns: string;
+      };
+      admin_set_variant_option_values: {
+        Args: { p_variant_id: string; p_option_value_ids: string[] };
+        Returns: undefined;
+      };
+      cart_add_variant: {
+        Args: { p_product_id: string; p_variant_id: string; p_quantity: number };
+        Returns: string;
+      };
+      cart_update_item_quantity: {
+        Args: { p_cart_item_id: string; p_quantity: number };
+        Returns: undefined;
+      };
+      cart_remove_item: {
+        Args: { p_cart_item_id: string };
+        Returns: undefined;
+      };
+      cart_clear_items: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
+      checkout_catalog_variant: {
+        Args: { p_address_id: string };
+        Returns: string;
+      };
       checkout_catalog: {
         Args: { p_address_id: string };
         Returns: string;
