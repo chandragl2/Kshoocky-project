@@ -61,6 +61,14 @@ export default function ProductCard({
           setFeedback("Produk sedang tidak tersedia.");
           return;
         }
+        if (error.code === "OPTION_REQUIRED") {
+          if (detailHref) {
+            router.push(detailHref);
+            return;
+          }
+          setFeedback("Pilih varian melalui halaman detail produk.");
+          return;
+        }
       }
       setFeedback("Gagal menambahkan produk ke keranjang.");
     } finally {
