@@ -28,9 +28,10 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'admin_option_group_invalid';
   END IF;
 
-  PERFORM 1
+  PERFORM product.id
   FROM public.products AS product
-  WHERE product.id = p_product_id AND product.is_catalog IS TRUE;
+  WHERE product.id = p_product_id AND product.is_catalog IS TRUE
+  FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'admin_catalog_product_not_found';
   END IF;
@@ -274,6 +275,14 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'admin_variant_options_invalid';
   END IF;
 
+  PERFORM product.id
+  FROM public.products AS product
+  WHERE product.id = p_product_id AND product.is_catalog IS TRUE
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'admin_catalog_product_not_found';
+  END IF;
+
   v_variant_id := public.admin_create_product_variant(
     p_product_id, p_sku, p_label, p_price, p_stock, p_status, p_image_url
   );
@@ -325,7 +334,22 @@ BEGIN
 
   SELECT product_id INTO v_product_id
   FROM public.product_variants
-  WHERE id = p_variant_id
+  WHERE id = p_variant_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'admin_variant_not_found';
+  END IF;
+
+  PERFORM product.id
+  FROM public.products AS product
+  WHERE product.id = v_product_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'admin_catalog_product_not_found';
+  END IF;
+
+  PERFORM variant.id
+  FROM public.product_variants AS variant
+  WHERE variant.id = p_variant_id
   FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'admin_variant_not_found';
