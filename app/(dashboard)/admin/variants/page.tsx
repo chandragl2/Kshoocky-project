@@ -70,10 +70,8 @@ export default function AdminVariantsPage() {
   const [variantOptions, setVariantOptions] = useState<Record<string, string>>({});
 
   const selectedProduct = products.find((product) => product.id === productId) ?? null;
-  const legacyVariant = variants.find(
-    (variant) =>
-      variant.sku === `LEGACY-${productId.replaceAll("-", "")}`,
-  );
+  const legacySku = `LEGACY-${productId.replaceAll("-", "")}`;
+  const legacyVariant = variants.find((variant) => variant.sku === legacySku);
   const loadProducts = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setError("Supabase belum dikonfigurasi.");
@@ -493,7 +491,7 @@ export default function AdminVariantsPage() {
                   <h2 className="text-base font-extrabold text-[#0F3854]">3. Varian & Stok</h2>
                   <p className="mt-1 text-sm text-slate-500">Setiap kombinasi yang dijual memiliki SKU, harga, dan stok.</p>
                 </div>
-                <button type="button" onClick={startCreateVariant} disabled={isSaving || (groups.length === 0 && variants.some((variant) => variant.status === "active" && !variant.sku.startsWith("LEGACY-")))} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-[#0F3854] disabled:opacity-40">
+                <button type="button" onClick={startCreateVariant} disabled={isSaving || (groups.length === 0 && variants.some((variant) => variant.status === "active" && variant.sku !== legacySku))} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-[#0F3854] disabled:opacity-40">
                   <PackagePlus className="h-4 w-4" /> Varian Baru
                 </button>
               </div>
@@ -563,7 +561,7 @@ export default function AdminVariantsPage() {
               <h2 className="text-base font-extrabold text-[#0F3854]">Daftar Varian</h2>
               <div className="mt-4 space-y-3">
                 {variants.map((variant) => {
-                  const isLegacyDisabled = groups.length > 0 && variant.sku.startsWith("LEGACY-");
+                  const isLegacyDisabled = groups.length > 0 && variant.sku === legacySku;
                   return (
                     <article key={variant.id} className="rounded-lg border border-slate-200 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
