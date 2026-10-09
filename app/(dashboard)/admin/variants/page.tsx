@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Loader2, PackagePlus, Pencil, Plus, RefreshCw } from "lucide-react";
 import { formatCurrency } from "@/lib/format-currency";
@@ -70,7 +70,6 @@ export default function AdminVariantsPage() {
   const [variantOptions, setVariantOptions] = useState<Record<string, string>>({});
 
   const selectedProduct = products.find((product) => product.id === productId) ?? null;
-  const editVariant = variants.find((variant) => variant.id === editingVariantId) ?? null;
   const legacyVariant = variants.find(
     (variant) =>
       variant.sku === `LEGACY-${productId.replaceAll("-", "")}`,
