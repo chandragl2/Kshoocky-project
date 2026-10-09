@@ -412,6 +412,17 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'cart_quantity_invalid';
   END IF;
 
+  -- Parent product is locked before variant to match checkout lock ordering.
+  PERFORM product.id
+  FROM public.products AS product
+  WHERE product.id = p_product_id
+    AND product.status = 'active'
+    AND product.is_catalog IS TRUE
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'cart_variant_unavailable';
+  END IF;
+
   INSERT INTO public.carts(user_id)
   VALUES (v_user_id)
   ON CONFLICT (user_id) DO UPDATE
@@ -435,8 +446,7 @@ BEGIN
     AND variant.status = 'active'
     AND product.status = 'active'
     AND product.is_catalog IS TRUE
-  FOR UPDATE OF variant
-  FOR SHARE OF product;
+  FOR UPDATE OF variant;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'cart_variant_unavailable';
@@ -501,17 +511,23 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'cart_item_not_found';
   END IF;
 
+  PERFORM product.id
+  FROM public.products AS product
+  WHERE product.id = v_product_id
+    AND product.status = 'active'
+    AND product.is_catalog IS TRUE
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'cart_variant_unavailable';
+  END IF;
+
   SELECT variant.stock
   INTO v_stock
   FROM public.product_variants AS variant
-  JOIN public.products AS product ON product.id = variant.product_id
   WHERE variant.id = v_variant_id
     AND variant.product_id = v_product_id
     AND variant.status = 'active'
-    AND product.status = 'active'
-    AND product.is_catalog IS TRUE
-  FOR UPDATE OF variant
-  FOR SHARE OF product;
+  FOR UPDATE OF variant;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'cart_variant_unavailable';
@@ -698,7 +714,6 @@ BEGIN
     WHERE cart_item.cart_id = v_cart_id
     ORDER BY variant.id, cart_item.id
     FOR UPDATE OF cart_item, variant
-    FOR SHARE OF product
   LOOP
     IF v_item.product_status <> 'active'
       OR NOT v_item.is_catalog
@@ -937,6 +952,17 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'admin_order_cannot_cancel_after_shipment';
     END IF;
 
+    -- Lock parent products in the same order as checkout/admin inventory edits.
+    PERFORM product.id
+    FROM public.products AS product
+    JOIN public.product_variants AS variant
+      ON variant.product_id = product.id
+    JOIN public.order_items AS item
+      ON item.variant_id = variant.id
+    WHERE item.order_id = p_order_id
+    ORDER BY product.id
+    FOR UPDATE OF product;
+
     WITH prior_sales AS (
       SELECT
         movement.variant_id,
@@ -1039,6 +1065,12 @@ GRANT EXECUTE ON FUNCTION public.admin_create_product_option_value(uuid, text, i
 GRANT EXECUTE ON FUNCTION public.admin_create_product_variant(uuid, text, text, numeric, integer, text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_product_variant(uuid, text, text, numeric, integer, text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_set_variant_option_values(uuid, uuid[]) TO authenticated;
+
+-- Base variant mutation RPCs are implementation details. Expose only the
+-- transactional wrappers that create/update the variant and option mapping together.
+REVOKE ALL ON FUNCTION public.admin_create_product_variant(uuid, text, text, numeric, integer, text, text) FROM authenticated;
+REVOKE ALL ON FUNCTION public.admin_update_product_variant(uuid, text, text, numeric, integer, text, text) FROM authenticated;
+REVOKE ALL ON FUNCTION public.admin_set_variant_option_values(uuid, uuid[]) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.cart_add_variant(uuid, uuid, integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.cart_update_item_quantity(uuid, integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.cart_remove_item(uuid) TO authenticated;
