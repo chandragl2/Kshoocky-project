@@ -12,11 +12,16 @@ import type { Database } from "@/lib/supabase/database";
 
 type CartItem = Database["public"]["Tables"]["cart_items"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
+type Variant = Database["public"]["Tables"]["product_variants"]["Row"];
 type Address = Database["public"]["Tables"]["addresses"]["Row"];
-type CheckoutItem = Pick<CartItem, "id" | "product_id" | "quantity"> & {
+type CheckoutItem = Pick<CartItem, "id" | "product_id" | "variant_id" | "quantity"> & {
   products: Pick<
     Product,
     "id" | "title" | "image_url" | "price" | "stock" | "status" | "is_catalog"
+  > | null;
+  product_variants: Pick<
+    Variant,
+    "id" | "sku" | "label" | "image_url" | "price" | "stock" | "status"
   > | null;
 };
 
@@ -74,7 +79,7 @@ export default function CheckoutPage() {
         const { data, error: itemsError } = await supabase
           .from("cart_items")
           .select(
-            "id, product_id, quantity, products(id, title, image_url, price, stock, status, is_catalog)",
+            "id, product_id, variant_id, quantity, products(id, title, image_url, price, stock, status, is_catalog), product_variants(id, sku, label, image_url, price, stock, status)",
           )
           .eq("cart_id", cart.id)
           .order("created_at", { ascending: true });
@@ -108,7 +113,7 @@ export default function CheckoutPage() {
 
   const subtotal = items.reduce(
     (total, item) =>
-      total + (item.products ? item.products.price * item.quantity : 0),
+      total + ((item.product_variants?.price ?? 0) * item.quantity),
     0,
   );
   const shippingFee = 0;
@@ -118,10 +123,13 @@ export default function CheckoutPage() {
     (item) =>
       !item.products ||
       item.products.status !== "active" ||
-      !item.products.is_catalog,
+      !item.products.is_catalog ||
+      !item.product_variants ||
+      item.product_variants.status !== "active",
   );
   const insufficientStockItems = items.filter(
-    (item) => item.products && item.quantity > item.products.stock,
+    (item) =>
+      item.product_variants && item.quantity > item.product_variants.stock,
   );
 
   async function submitOrder() {
@@ -323,12 +331,15 @@ export default function CheckoutPage() {
               <div className="mt-4 divide-y divide-slate-100">
                 {items.map((item) => {
                   const product = item.products;
+                  const variant = item.product_variants;
                   const lineUnavailable =
                     !product ||
                     product.status !== "active" ||
-                    !product.is_catalog;
+                    !product.is_catalog ||
+                    !variant ||
+                    variant.status !== "active";
                   const lineOutOfStock =
-                    product !== null && item.quantity > product.stock;
+                    Boolean(variant && item.quantity > variant.stock);
 
                   return (
                     <article
@@ -336,9 +347,9 @@ export default function CheckoutPage() {
                       className="flex gap-4 py-4 first:pt-0 last:pb-0"
                     >
                       <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-md bg-[#f1f1ef] sm:h-24 sm:w-20">
-                        {product?.image_url ? (
+                        {(variant?.image_url ?? product?.image_url) ? (
                           <Image
-                            src={product.image_url}
+                            src={(variant?.image_url ?? product?.image_url)!}
                             alt={product.title}
                             fill
                             unoptimized
@@ -355,16 +366,21 @@ export default function CheckoutPage() {
                         <h3 className="break-words text-sm font-extrabold text-[#0F3854]">
                           {product?.title ?? "Produk tidak tersedia"}
                         </h3>
+                        {variant && variant.label !== "Default" && (
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            {variant.label} · SKU {variant.sku}
+                          </p>
+                        )}
                         <p className="mt-1 text-xs text-slate-500">
                           {item.quantity} ×{" "}
-                          {product
-                            ? formatCurrency(product.price)
+                          {variant
+                            ? formatCurrency(variant.price)
                             : "Harga tidak tersedia"}
                         </p>
                         <p className="mt-2 text-sm font-bold text-slate-700">
                           Subtotal:{" "}
-                          {product
-                            ? formatCurrency(product.price * item.quantity)
+                          {variant
+                            ? formatCurrency(variant.price * item.quantity)
                             : "-"}
                         </p>
                         {(lineUnavailable || lineOutOfStock) && (
