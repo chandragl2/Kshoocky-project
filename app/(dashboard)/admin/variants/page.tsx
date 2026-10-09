@@ -75,11 +75,6 @@ export default function AdminVariantsPage() {
     (variant) =>
       variant.sku === `LEGACY-${productId.replaceAll("-", "")}`,
   );
-  const configurableVariants = useMemo(
-    () => variants.filter((variant) => !variant.sku.startsWith("LEGACY-") || groups.length === 0),
-    [groups.length, variants],
-  );
-
   const loadProducts = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setError("Supabase belum dikonfigurasi.");
