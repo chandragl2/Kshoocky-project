@@ -125,7 +125,7 @@ function canTransition(current: string, next: OrderStatus) {
   if (current === "processing")
     return next === "shipped" || next === "cancelled";
   if (current === "shipped")
-    return next === "completed" || next === "cancelled";
+    return next === "completed";
   return false;
 }
 
