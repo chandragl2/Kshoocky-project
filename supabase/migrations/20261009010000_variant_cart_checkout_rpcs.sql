@@ -401,6 +401,11 @@ BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = '28000', MESSAGE = 'cart_unauthenticated';
   END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(v_user_id::text, 0)
+  );
+
   IF p_product_id IS NULL OR p_variant_id IS NULL
     OR p_quantity IS NULL OR p_quantity < 1 OR p_quantity > 99
   THEN
@@ -473,6 +478,11 @@ BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = '28000', MESSAGE = 'cart_unauthenticated';
   END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(v_user_id::text, 0)
+  );
+
   IF p_cart_item_id IS NULL OR p_quantity IS NULL
     OR p_quantity < 1 OR p_quantity > 99
   THEN
@@ -529,6 +539,11 @@ BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = '28000', MESSAGE = 'cart_unauthenticated';
   END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(v_user_id::text, 0)
+  );
+
   IF p_cart_item_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'cart_item_id_invalid';
   END IF;
@@ -558,6 +573,10 @@ BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = '28000', MESSAGE = 'cart_unauthenticated';
   END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(v_user_id::text, 0)
+  );
 
   DELETE FROM public.cart_items AS item
   USING public.carts AS cart
