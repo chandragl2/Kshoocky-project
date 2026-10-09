@@ -64,17 +64,30 @@ CREATE TABLE public.product_variant_option_values (
 -- variant_id is nullable during the phased client rollout. Legacy callers may omit it
 -- until cart RPCs/client code are upgraded.
 ALTER TABLE public.cart_items
-  ADD COLUMN variant_id uuid
-  REFERENCES public.product_variants(id) ON DELETE SET NULL;
+  ADD COLUMN variant_id uuid;
+
+-- Keep a cart line's variant tied to the same product. This composite reference
+-- also prevents deleting a variant that is still present in a cart.
+ALTER TABLE public.cart_items
+  ADD CONSTRAINT cart_items_variant_product_fkey
+  FOREIGN KEY (variant_id, product_id)
+  REFERENCES public.product_variants(id, product_id)
+  ON DELETE RESTRICT;
 
 -- Existing orders deliberately keep NULL variant snapshots: the historical variant
--- cannot be reconstructed reliably from today's product data.
+-- cannot be reconstructed reliably from today's product data. Variant references
+-- are restricted from deletion to preserve historical integrity.
 ALTER TABLE public.order_items
-  ADD COLUMN variant_id uuid
-    REFERENCES public.product_variants(id) ON DELETE SET NULL,
+  ADD COLUMN variant_id uuid,
   ADD COLUMN variant_sku_snapshot text,
   ADD COLUMN variant_label_snapshot text,
   ADD COLUMN variant_options_snapshot jsonb;
+
+ALTER TABLE public.order_items
+  ADD CONSTRAINT order_items_variant_product_fkey
+  FOREIGN KEY (variant_id, product_id)
+  REFERENCES public.product_variants(id, product_id)
+  ON DELETE RESTRICT;
 
 CREATE TABLE public.inventory_movements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
