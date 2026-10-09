@@ -164,6 +164,14 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'admin_product_invalid';
   END IF;
 
+  PERFORM product.id
+  FROM public.products AS product
+  WHERE product.id = p_product_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'admin_product_not_found';
+  END IF;
+
   SELECT EXISTS (
     SELECT 1
     FROM public.product_option_groups AS option_group
