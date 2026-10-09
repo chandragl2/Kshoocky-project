@@ -583,11 +583,11 @@ export interface Database {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "order_items_variant_id_fkey";
-            columns: ["variant_id"];
+            foreignKeyName: "order_items_variant_product_fkey";
+            columns: ["variant_id", "product_id"];
             isOneToOne: false;
             referencedRelation: "product_variants";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "product_id"];
           },
         ];
       };
@@ -664,11 +664,11 @@ export interface Database {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "cart_items_variant_id_fkey";
-            columns: ["variant_id"];
+            foreignKeyName: "cart_items_variant_product_fkey";
+            columns: ["variant_id", "product_id"];
             isOneToOne: false;
             referencedRelation: "product_variants";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "product_id"];
           },
         ];
       };
