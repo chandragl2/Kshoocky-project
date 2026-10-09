@@ -642,6 +642,16 @@ BEGIN
   WHERE cart_item.cart_id = v_cart_id
   FOR UPDATE;
 
+  -- Lock all parent product rows in deterministic order before variant locks.
+  -- Checkout also updates product.stock as a legacy aggregate summary.
+  PERFORM product.id
+  FROM public.products AS product
+  JOIN public.cart_items AS cart_item
+    ON cart_item.product_id = product.id
+  WHERE cart_item.cart_id = v_cart_id
+  ORDER BY product.id
+  FOR UPDATE OF product;
+
   SELECT pg_catalog.count(*)
   INTO v_cart_item_count
   FROM public.cart_items AS cart_item
@@ -859,6 +869,23 @@ BEGIN
     );
   END LOOP;
 
+  -- Keep legacy product listing summaries accurate. Each actual unit's price/stock
+  -- remains on product_variants; products.stock represents aggregate active stock.
+  UPDATE public.products AS product
+  SET
+    stock = COALESCE((
+      SELECT pg_catalog.sum(variant.stock)::integer
+      FROM public.product_variants AS variant
+      WHERE variant.product_id = product.id
+        AND variant.status = 'active'
+    ), 0),
+    updated_at = pg_catalog.now()
+  WHERE product.id IN (
+    SELECT cart_item.product_id
+    FROM public.cart_items AS cart_item
+    WHERE cart_item.id = ANY(v_cart_item_ids)
+  );
+
   DELETE FROM public.cart_items
   WHERE cart_id = v_cart_id
     AND id = ANY(v_cart_item_ids);
@@ -886,7 +913,7 @@ BEGIN
   END IF;
 
   IF p_order_id IS NULL OR p_order_status IS NULL OR p_order_status NOT IN (
-    'pending', 'processing', 'shipped', 'delivered', 'cancelled'
+    'pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'
   ) THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'admin_order_status_invalid';
   END IF;
@@ -906,7 +933,7 @@ BEGIN
   END IF;
 
   IF p_order_status = 'cancelled' THEN
-    IF v_current_status IN ('shipped', 'delivered') THEN
+    IF v_current_status IN ('shipped', 'delivered', 'completed') THEN
       RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'admin_order_cannot_cancel_after_shipment';
     END IF;
 
@@ -952,6 +979,22 @@ BEGIN
         updated_at = pg_catalog.now()
     FROM totals
     WHERE variant.id = totals.variant_id;
+
+    UPDATE public.products AS product
+    SET
+      stock = COALESCE((
+        SELECT pg_catalog.sum(variant.stock)::integer
+        FROM public.product_variants AS variant
+        WHERE variant.product_id = product.id
+          AND variant.status = 'active'
+      ), 0),
+      updated_at = pg_catalog.now()
+    WHERE product.id IN (
+      SELECT DISTINCT variant.product_id
+      FROM public.product_variants AS variant
+      JOIN public.order_items AS item ON item.variant_id = variant.id
+      WHERE item.order_id = p_order_id
+    );
   END IF;
 
   UPDATE public.orders AS target_order
@@ -983,6 +1026,11 @@ REVOKE ALL ON FUNCTION public.cart_add_variant(uuid, uuid, integer) FROM PUBLIC,
 REVOKE ALL ON FUNCTION public.cart_update_item_quantity(uuid, integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.cart_remove_item(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.cart_clear_items() FROM PUBLIC, anon;
+-- Disable the legacy checkout RPC after the variant-aware checkout is deployed.
+-- Otherwise authenticated users could keep creating orders through the old
+-- function, which validates but does not decrement inventory.
+REVOKE ALL ON FUNCTION public.checkout_catalog(uuid) FROM PUBLIC, anon, authenticated, service_role;
+
 REVOKE ALL ON FUNCTION public.checkout_catalog_variant(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_update_order_status(uuid, text) FROM PUBLIC, anon;
 
