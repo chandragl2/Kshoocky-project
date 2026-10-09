@@ -12,17 +12,25 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { dispatchCartUpdated, getOrCreateUserCart } from "@/lib/cart";
+import { clearCartItems, dispatchCartUpdated, findUserCart, removeCartItem, updateCartItemQuantity } from "@/lib/cart";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database";
 
 type CartRow = Database["public"]["Tables"]["cart_items"]["Row"];
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
-type CartLine = Pick<CartRow, "id" | "cart_id" | "product_id" | "quantity"> & {
+type VariantRow = Database["public"]["Tables"]["product_variants"]["Row"];
+type CartLine = Pick<
+  CartRow,
+  "id" | "cart_id" | "product_id" | "variant_id" | "quantity"
+> & {
   products: Pick<
     ProductRow,
     "id" | "title" | "slug" | "price" | "image_url" | "stock" | "status"
+  > | null;
+  product_variants: Pick<
+    VariantRow,
+    "id" | "sku" | "label" | "price" | "image_url" | "stock" | "status"
   > | null;
 };
 
@@ -60,11 +68,17 @@ export default function UserCartPage() {
         return;
       }
 
-      const cart = await getOrCreateUserCart(supabase, user.id);
+      const cart = await findUserCart(supabase, user.id);
+      if (!cart) {
+        setCartId(null);
+        setItems([]);
+        return;
+      }
+
       const { data, error: itemsError } = await supabase
         .from("cart_items")
         .select(
-          "id, cart_id, product_id, quantity, products(id, title, slug, price, image_url, stock, status)",
+          "id, cart_id, product_id, variant_id, quantity, products(id, title, slug, price, image_url, stock, status), product_variants(id, sku, label, price, image_url, stock, status)",
         )
         .eq("cart_id", cart.id)
         .order("created_at", { ascending: true });
@@ -83,35 +97,14 @@ export default function UserCartPage() {
     void loadCart();
   }, [loadCart]);
 
-  async function getOwnedCartId() {
-    if (!supabase) throw new Error("Cart unavailable");
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      router.replace("/login");
-      return null;
-    }
-
-    const { data, error: cartError } = await supabase
-      .from("carts")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (cartError || !data || (cartId && data.id !== cartId)) {
-      throw new Error("Cart unavailable");
-    }
-    return data.id;
-  }
-
   async function updateQuantity(item: CartLine, nextQuantity: number) {
     if (busyItemId || isClearing || !supabase) return;
     const product = item.products;
-    if (!product || product.status !== "active" || product.stock <= 0) return;
+    const variant = item.product_variants;
+    if (!product || product.status !== "active" || !variant || variant.status !== "active" || variant.stock <= 0) return;
     if (nextQuantity < 1) return;
-    if (nextQuantity > product.stock) {
-      setError("Jumlah melebihi stok yang tersedia.");
+    if (nextQuantity > variant.stock) {
+      setError("Jumlah melebihi stok varian yang tersedia.");
       return;
     }
 
@@ -119,18 +112,7 @@ export default function UserCartPage() {
     setError("");
     setNotice("");
     try {
-      const ownedCartId = await getOwnedCartId();
-      if (!ownedCartId) return;
-      const { data, error: updateError } = await supabase
-        .from("cart_items")
-        .update({ quantity: nextQuantity })
-        .eq("id", item.id)
-        .eq("cart_id", ownedCartId)
-        .select("id")
-        .maybeSingle();
-      if (updateError || !data)
-        throw updateError ?? new Error("Item unavailable");
-
+      await updateCartItemQuantity(supabase, item.id, nextQuantity);
       setItems((current) =>
         current.map((currentItem) =>
           currentItem.id === item.id
@@ -152,18 +134,7 @@ export default function UserCartPage() {
     setError("");
     setNotice("");
     try {
-      const ownedCartId = await getOwnedCartId();
-      if (!ownedCartId) return;
-      const { data, error: deleteError } = await supabase
-        .from("cart_items")
-        .delete()
-        .eq("id", itemId)
-        .eq("cart_id", ownedCartId)
-        .select("id")
-        .maybeSingle();
-      if (deleteError || !data)
-        throw deleteError ?? new Error("Item unavailable");
-
+      await removeCartItem(supabase, itemId);
       setItems((current) => current.filter((item) => item.id !== itemId));
       dispatchCartUpdated();
     } catch {
@@ -181,14 +152,7 @@ export default function UserCartPage() {
     setError("");
     setNotice("");
     try {
-      const ownedCartId = await getOwnedCartId();
-      if (!ownedCartId) return;
-      const { error: deleteError } = await supabase
-        .from("cart_items")
-        .delete()
-        .eq("cart_id", ownedCartId);
-      if (deleteError) throw deleteError;
-
+      await clearCartItems(supabase);
       setItems([]);
       setNotice("Keranjang berhasil dikosongkan.");
       dispatchCartUpdated();
@@ -202,7 +166,7 @@ export default function UserCartPage() {
   const itemCount = items.reduce((total, item) => total + item.quantity, 0);
   const subtotal = items.reduce(
     (total, item) =>
-      total + (item.products ? item.products.price * item.quantity : 0),
+      total + ((item.product_variants?.price ?? item.products?.price ?? 0) * item.quantity),
     0,
   );
 
@@ -273,8 +237,14 @@ export default function UserCartPage() {
           <section aria-label="Produk di keranjang" className="space-y-3">
             {items.map((item) => {
               const product = item.products;
+              const variant = item.product_variants;
+              const currentPrice = variant?.price ?? product?.price ?? 0;
+              const currentStock = variant?.stock ?? 0;
+              const displayImageUrl = variant?.image_url ?? product?.image_url;
               const isAvailable =
-                product?.status === "active" && product.stock > 0;
+                product?.status === "active" &&
+                variant?.status === "active" &&
+                currentStock > 0;
               const isBusy = busyItemId === item.id;
 
               return (
@@ -284,9 +254,9 @@ export default function UserCartPage() {
                 >
                   <div className="flex gap-4 sm:gap-5">
                     <div className="relative h-24 w-20 shrink-0 overflow-hidden rounded-md bg-[#f1f1ef] sm:h-28 sm:w-24">
-                      {product?.image_url ? (
+                      {displayImageUrl ? (
                         <Image
-                          src={product.image_url}
+                          src={displayImageUrl!}
                           alt={product.title}
                           fill
                           unoptimized
@@ -307,10 +277,15 @@ export default function UserCartPage() {
                             {product?.title ?? "Produk tidak tersedia"}
                           </h2>
                           <p className="mt-1 text-sm font-bold text-[#b86645]">
-                            {product
-                              ? formatCurrency(product.price)
+                            {variant
+                              ? formatCurrency(currentPrice)
                               : "Harga tidak tersedia"}
                           </p>
+                          {variant && variant.label !== "Default" && (
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              Varian: {variant.label} · SKU {variant.sku}
+                            </p>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -359,7 +334,7 @@ export default function UserCartPage() {
                               disabled={
                                 isBusy ||
                                 isClearing ||
-                                item.quantity >= product.stock
+                                item.quantity >= currentStock
                               }
                               className="flex h-9 w-9 items-center justify-center text-[#0F3854] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
                             >
@@ -372,8 +347,8 @@ export default function UserCartPage() {
                           </span>
                         )}
                         <span className="text-sm font-extrabold text-[#0F3854]">
-                          {product
-                            ? formatCurrency(product.price * item.quantity)
+                          {variant
+                            ? formatCurrency(currentPrice * item.quantity)
                             : "-"}
                         </span>
                       </div>
@@ -382,14 +357,14 @@ export default function UserCartPage() {
                           Produk sedang tidak tersedia.
                         </p>
                       )}
-                      {product?.status === "active" && product.stock <= 0 && (
+                      {product?.status === "active" && currentStock <= 0 && (
                         <p className="mt-2 text-xs font-semibold text-red-700">
                           Produk sedang habis.
                         </p>
                       )}
                       {product?.status === "active" &&
-                        product.stock > 0 &&
-                        item.quantity > product.stock && (
+                        currentStock > 0 &&
+                        item.quantity > currentStock && (
                           <p className="mt-2 text-xs font-semibold text-amber-700">
                             Jumlah saat ini melebihi stok. Kurangi jumlah untuk
                             melanjutkan nanti.
