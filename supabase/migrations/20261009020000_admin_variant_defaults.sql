@@ -252,6 +252,21 @@ BEGIN
     SET status = p_status, updated_at = pg_catalog.now()
     WHERE variant.product_id = v_product_id
       AND variant.sku = 'LEGACY-' || pg_catalog.replace(v_product_id::text, '-', '');
+
+    UPDATE public.products AS product
+    SET
+      price = COALESCE((
+        SELECT pg_catalog.min(variant.price)
+        FROM public.product_variants AS variant
+        WHERE variant.product_id = v_product_id AND variant.status = 'active'
+      ), product.price),
+      stock = COALESCE((
+        SELECT pg_catalog.sum(variant.stock)::integer
+        FROM public.product_variants AS variant
+        WHERE variant.product_id = v_product_id AND variant.status = 'active'
+      ), 0),
+      updated_at = pg_catalog.now()
+    WHERE product.id = v_product_id;
   END IF;
 
   RETURN v_product_id;
