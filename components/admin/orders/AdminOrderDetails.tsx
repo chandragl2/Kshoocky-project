@@ -29,7 +29,14 @@ type CustomerProfile = Pick<
 >;
 type OrderItem = Pick<
   Database["public"]["Tables"]["order_items"]["Row"],
-  "id" | "product_title" | "quantity" | "unit_price" | "subtotal"
+  | "id"
+  | "product_title"
+  | "quantity"
+  | "unit_price"
+  | "subtotal"
+  | "variant_sku_snapshot"
+  | "variant_label_snapshot"
+  | "variant_options_snapshot"
 >;
 type OrderStatus =
   | "pending"
@@ -157,7 +164,7 @@ export default function AdminOrderDetails() {
       const [itemsResult, profileResult] = await Promise.all([
         supabase
           .from("order_items")
-          .select("id, product_title, quantity, unit_price, subtotal")
+          .select("id, product_title, quantity, unit_price, subtotal, variant_sku_snapshot, variant_label_snapshot, variant_options_snapshot")
           .eq("order_id", orderData.id)
           .order("created_at", { ascending: true }),
         supabase
@@ -436,6 +443,30 @@ export default function AdminOrderDetails() {
                           >
                             <td className="py-4 pr-3 font-semibold text-slate-800">
                               {item.product_title}
+                              {item.variant_label_snapshot && item.variant_label_snapshot !== "Default" && (
+                                <p className="mt-1 text-xs font-semibold text-slate-600">
+                                  {item.variant_label_snapshot}
+                                </p>
+                              )}
+                              {item.variant_sku_snapshot && (
+                                <p className="mt-1 text-[11px] font-normal text-slate-500">
+                                  SKU: {item.variant_sku_snapshot}
+                                </p>
+                              )}
+                              {Array.isArray(item.variant_options_snapshot) &&
+                                item.variant_options_snapshot.length > 0 && (
+                                  <p className="mt-1 text-xs font-normal text-slate-500">
+                                    {item.variant_options_snapshot
+                                      .map((option) => {
+                                        if (typeof option !== "object" || option === null || Array.isArray(option)) return "";
+                                        const group = typeof option.group === "string" ? option.group : "";
+                                        const value = typeof option.value === "string" ? option.value : "";
+                                        return group && value ? `${group}: ${value}` : value;
+                                      })
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </p>
+                                )}
                             </td>
                             <td className="px-3 py-4 text-right">
                               {item.quantity}
