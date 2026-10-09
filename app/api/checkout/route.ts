@@ -17,7 +17,11 @@ const checkoutErrors: Record<string, { status: number; message: string }> = {
   },
   checkout_stock_insufficient: {
     status: 409,
-    message: "Stok produk tidak mencukupi.",
+    message: "Stok varian produk tidak mencukupi.",
+  },
+  checkout_quantity_invalid: {
+    status: 400,
+    message: "Jumlah produk tidak valid.",
   },
 };
 
@@ -97,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: orderId, error: checkoutError } = await supabase.rpc(
-      "checkout_catalog",
+      "checkout_catalog_variant",
       { p_address_id: addressId },
     );
     if (checkoutError) {
