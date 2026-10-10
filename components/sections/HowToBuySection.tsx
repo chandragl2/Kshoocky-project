@@ -44,12 +44,12 @@ export default function HowToBuySection() {
   return (
     <section
       id="cara-belanja"
-      className="w-full bg-[#F9F6E7] py-24 px-8 flex justify-center items-center flex-col"
+      className="w-full bg-[#FBF5EA] py-24 px-8 flex justify-center items-center flex-col"
       aria-label="Cara Belanja"
     >
       {/* Heading */}
       <div className="text-center mb-16">
-        <h2 className="text-4xl lg:text-5xl font-extrabold text-[#0B1320]">
+        <h2 className="text-4xl lg:text-5xl font-extrabold text-[#1F1F2B]">
           Cara Belanja di KSHOOCKY
         </h2>
       </div>
@@ -59,18 +59,18 @@ export default function HowToBuySection() {
         {STEPS.map((item) => (
           <div
             key={item.step}
-            className="bg-white p-8 pt-10 rounded-3xl text-center shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            className="bg-[#FFF9F2] p-8 pt-10 rounded-3xl text-center shadow-sm border border-[#F4A6B8]/30 hover:shadow-md transition-shadow"
           >
-            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full border border-[#E5B869]/60 bg-[#F9F6E7] text-[#0F3854] shadow-[0_6px_16px_rgba(15,56,84,0.08)]">
+            <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full border border-[#F4A6B8]/60 bg-[#F4A6B8]/20 text-[#C92A4B] shadow-[0_6px_16px_rgba(201,42,75,0.08)]">
               <item.icon className="h-7 w-7" strokeWidth={1.6} />
             </div>
-            <div className="text-xs font-extrabold text-gray-400 tracking-widest mb-2">
+            <div className="text-xs font-extrabold text-[#C92A4B] tracking-widest mb-2">
               {item.step}
             </div>
-            <h3 className="text-xl lg:text-2xl font-bold text-[#0B1320] mb-3">
+            <h3 className="text-xl lg:text-2xl font-bold text-[#1F1F2B] mb-3">
               {item.title}
             </h3>
-            <p className="text-base text-gray-500 leading-relaxed">
+            <p className="text-base text-[#1F1F2B]/70 leading-relaxed">
               {item.desc}
             </p>
           </div>

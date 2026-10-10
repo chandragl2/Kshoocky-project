@@ -9,6 +9,7 @@ export type Json =
 export type ProfileRole = "customer" | "admin";
 export type ProductStatus = "active" | "inactive" | "out_of_stock";
 export type PreorderEventStatus = "draft" | "active" | "closed" | "cancelled";
+export type FeaturedEventMediaType = "image" | "video";
 
 export interface Database {
   public: {
@@ -38,6 +39,57 @@ export interface Database {
           phone_number?: string;
           avatar_url?: string;
           role?: ProfileRole;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      featured_events: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          media_type: FeaturedEventMediaType;
+          media_url: string;
+          thumbnail_url: string | null;
+          cta_text: string | null;
+          cta_url: string | null;
+          is_active: boolean;
+          sort_order: number;
+          starts_at: string | null;
+          ends_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          media_type: FeaturedEventMediaType;
+          media_url: string;
+          thumbnail_url?: string | null;
+          cta_text?: string | null;
+          cta_url?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string | null;
+          media_type?: FeaturedEventMediaType;
+          media_url?: string;
+          thumbnail_url?: string | null;
+          cta_text?: string | null;
+          cta_url?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          starts_at?: string | null;
+          ends_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -676,6 +728,45 @@ export interface Database {
       admin_update_order_status: {
         Args: { p_order_id: string; p_order_status: string };
         Returns: undefined;
+      };
+      admin_create_featured_event: {
+        Args: {
+          p_title: string;
+          p_description: string | null;
+          p_media_type: FeaturedEventMediaType;
+          p_media_url: string;
+          p_thumbnail_url: string | null;
+          p_cta_text: string | null;
+          p_cta_url: string | null;
+          p_sort_order: number;
+          p_starts_at: string | null;
+          p_ends_at: string | null;
+        };
+        Returns: string;
+      };
+      admin_update_featured_event: {
+        Args: {
+          p_event_id: string;
+          p_title: string;
+          p_description: string | null;
+          p_media_type: FeaturedEventMediaType;
+          p_media_url: string;
+          p_thumbnail_url: string | null;
+          p_cta_text: string | null;
+          p_cta_url: string | null;
+          p_sort_order: number;
+          p_starts_at: string | null;
+          p_ends_at: string | null;
+        };
+        Returns: string;
+      };
+      admin_delete_featured_event: {
+        Args: { p_event_id: string };
+        Returns: string;
+      };
+      admin_update_featured_event_status: {
+        Args: { p_event_id: string; p_is_active: boolean };
+        Returns: string;
       };
       checkout_catalog: {
         Args: { p_address_id: string };

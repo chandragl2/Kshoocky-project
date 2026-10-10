@@ -14,8 +14,8 @@ export default function HomePage() {
       <Navbar />
       <HeroSection />
       <ServicesSection />
-      <WhyUsSection />
       <HowToBuySection />
+      <WhyUsSection />
       <CtaSection />
       <Footer />
     </main>

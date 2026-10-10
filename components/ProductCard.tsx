@@ -19,9 +19,11 @@ export type Product = Database["public"]["Tables"]["products"]["Row"];
 export default function ProductCard({
   product,
   detailHref,
+  isPreorder = false,
 }: {
   product: Product;
   detailHref?: string;
+  isPreorder?: boolean;
 }) {
   const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
@@ -72,11 +74,13 @@ export default function ProductCard({
     <article className="group flex h-full min-w-0 flex-col">
       <div className="relative aspect-[0.88] overflow-hidden rounded-[3px] bg-[#f1f1ef]">
         <span className="absolute left-3 top-3 z-10 bg-[#292421] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-white">
-          {isAvailable
-            ? "Tersedia"
-            : product.status === "active"
-              ? "Habis"
-              : "Tidak tersedia"}
+          {isPreorder
+            ? "Pre Order"
+            : isAvailable
+              ? "Tersedia"
+              : product.status === "active"
+                ? "Habis"
+                : "Tidak tersedia"}
         </span>
         <button
           type="button"

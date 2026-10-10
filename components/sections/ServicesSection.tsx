@@ -33,18 +33,18 @@ export default function ServicesSection() {
   return (
     <section
       id="layanan"
-      className="w-full bg-[#F9F9F9] py-24 px-8 flex justify-center items-center flex-col"
+      className="w-full bg-[#FBF5EA] py-24 px-8 flex justify-center items-center flex-col"
       aria-label="Layanan Kami"
     >
       {/* Heading */}
       <div className="text-center mb-16 max-w-3xl">
-        <span className="text-[#E5B869] font-extrabold tracking-widest text-sm uppercase">
+        <span className="text-[#C92A4B] font-extrabold tracking-widest text-sm uppercase">
           OUR SERVICES
         </span>
-        <h2 className="text-4xl lg:text-5xl font-extrabold text-[#0B1320] mt-4">
+        <h2 className="text-4xl lg:text-5xl font-extrabold text-[#1F1F2B] mt-4">
           All-in-One K-Jastip for You!
         </h2>
-        <p className="text-lg text-gray-600 mt-6 leading-relaxed">
+        <p className="text-lg text-[#1F1F2B]/75 mt-6 leading-relaxed">
           Semua kebutuhan belanja dan pengiriman dari Korea, kami bantu dalam
           satu layanan yang praktis, aman, dan transparan.
         </p>
@@ -55,18 +55,18 @@ export default function ServicesSection() {
         {SERVICES.map((item) => (
           <div
             key={item.title}
-            className="flex h-full min-h-[280px] flex-col rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-shadow hover:shadow-md lg:p-10"
+            className="flex h-full min-h-[280px] flex-col rounded-2xl border border-[#F4A6B8]/30 bg-[#FFF9F2] p-8 shadow-sm transition-shadow hover:shadow-md lg:p-10"
           >
             <div
-              className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#E5B869]/60 bg-[#F9F6E7] text-[#0B1320]"
+              className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#F4A6B8]/50 bg-[#F4A6B8]/20 text-[#C92A4B]"
               aria-hidden="true"
             >
               <item.icon className="h-7 w-7" strokeWidth={1.7} />
             </div>
-            <h3 className="mb-3 text-xl font-bold text-[#0B1320] lg:text-2xl">
+            <h3 className="mb-3 text-xl font-bold text-[#1F1F2B] lg:text-2xl">
               {item.title}
             </h3>
-            <p className="text-base leading-relaxed text-gray-500">
+            <p className="text-base leading-relaxed text-[#1F1F2B]/70">
               {item.desc}
             </p>
           </div>

@@ -5,10 +5,16 @@ import { PackageOpen, Search } from "lucide-react";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import ProductCard, { Product } from "@/components/ProductCard";
+import { usePreorderData } from "@/hooks/usePreorderData";
 import { useProducts } from "@/hooks/useProducts";
 
 function CatalogLanding() {
   const { products, isLoading, loadError } = useProducts("active");
+  const { eventProducts: activePreorderProducts } = usePreorderData();
+  const preorderProductIds = useMemo(
+    () => new Set(activePreorderProducts.map(({ product }) => product.id)),
+    [activePreorderProducts],
+  );
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Semua kategori");
   const [minPrice, setMinPrice] = useState("");
@@ -149,6 +155,7 @@ function CatalogLanding() {
                       key={product.id}
                       product={product}
                       detailHref={`/catalog/${encodeURIComponent(product.slug)}`}
+                      isPreorder={preorderProductIds.has(product.id)}
                     />
                   ))}
                 </div>

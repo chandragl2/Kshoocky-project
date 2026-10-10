@@ -26,8 +26,15 @@ import {
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database, ProductStatus } from "@/lib/supabase/database";
 import PreorderManager from "@/components/admin/PreorderManager";
+import FeaturedEventsManager from "@/components/admin/FeaturedEventsManager";
 
-type Tab = "shipments" | "products" | "orders" | "preorder" | "settings";
+type Tab =
+  | "shipments"
+  | "products"
+  | "orders"
+  | "preorder"
+  | "featured-events"
+  | "settings";
 type ShipmentStatus =
   | "SEOUL_WH"
   | "IN_TRANSIT"
@@ -83,6 +90,7 @@ const tabs = [
     icon: CircleDollarSign,
   },
   { id: "preorder" as const, label: "Event Preorder", icon: CalendarDays },
+  { id: "featured-events" as const, label: "Featured Events", icon: Star },
   { id: "settings" as const, label: "Settings", icon: Settings },
 ];
 
@@ -1999,6 +2007,7 @@ export default function AdminPage() {
           </SectionCard>
         )}
         {activeTab === "preorder" && <PreorderManager />}
+        {activeTab === "featured-events" && <FeaturedEventsManager />}
         {isLoading && (
           <div className="fixed bottom-6 right-6 flex items-center gap-2 rounded-full bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white shadow-xl">
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat data
