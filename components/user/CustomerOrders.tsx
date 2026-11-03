@@ -7,6 +7,11 @@ import { Loader2, PackageOpen } from "lucide-react";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database";
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_OPTIONS,
+  type OrderStatus,
+} from "@/lib/order-status";
 
 type Order = Pick<
   Database["public"]["Tables"]["orders"]["Row"],
@@ -17,21 +22,14 @@ type Order = Pick<
   | "order_status"
   | "total_price"
 >;
-type OrderFilter =
-  | "all"
-  | "pending"
-  | "processing"
-  | "shipped"
-  | "completed"
-  | "cancelled";
+type OrderFilter = "all" | OrderStatus;
 
 const filters: { id: OrderFilter; label: string }[] = [
   { id: "all", label: "Semua" },
-  { id: "pending", label: "Menunggu Pembayaran" },
-  { id: "processing", label: "Diproses" },
-  { id: "shipped", label: "Dikirim" },
-  { id: "completed", label: "Selesai" },
-  { id: "cancelled", label: "Dibatalkan" },
+  ...ORDER_STATUS_OPTIONS.map(({ value, label }) => ({
+    id: value,
+    label,
+  })),
 ];
 
 const paymentLabels: Record<string, string> = {
@@ -39,14 +37,6 @@ const paymentLabels: Record<string, string> = {
   paid: "Pembayaran Berhasil",
   failed: "Pembayaran Gagal",
   refunded: "Dana Dikembalikan",
-};
-
-const orderLabels: Record<string, string> = {
-  pending: "Menunggu Diproses",
-  processing: "Sedang Diproses",
-  shipped: "Sedang Dikirim",
-  completed: "Selesai",
-  cancelled: "Dibatalkan",
 };
 
 function formatDate(value: string) {
@@ -58,7 +48,11 @@ function formatDate(value: string) {
 }
 
 function statusClass(status: string) {
-  if (status === "paid" || status === "completed") {
+  if (
+    status === "paid" ||
+    status === "delivered" ||
+    status === "completed"
+  ) {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
   if (status === "failed" || status === "cancelled") {
@@ -121,9 +115,6 @@ export default function CustomerOrders() {
 
   const visibleOrders = useMemo(() => {
     if (activeFilter === "all") return orders;
-    if (activeFilter === "pending") {
-      return orders.filter((order) => order.payment_status === "pending");
-    }
     return orders.filter((order) => order.order_status === activeFilter);
   }, [activeFilter, orders]);
 
@@ -225,7 +216,7 @@ export default function CustomerOrders() {
                         <span
                           className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass(order.order_status)}`}
                         >
-                          {orderLabels[order.order_status] ??
+                          {ORDER_STATUS_LABELS[order.order_status] ??
                             order.order_status}
                         </span>
                       </div>

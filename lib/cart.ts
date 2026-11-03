@@ -12,11 +12,38 @@ export class CartOperationError extends Error {
       | "PRODUCT_UNAVAILABLE"
       | "OUT_OF_STOCK"
       | "STOCK_LIMIT"
+      | "OPTION_REQUIRED"
       | "REQUEST",
   ) {
     super(code);
     this.name = "CartOperationError";
   }
+}
+
+function logCartDatabaseError(
+  operation: string,
+  error: { code: string; message: string },
+) {
+  console.error(`[Cart] ${operation} failed`, {
+    code: error.code,
+    message: error.message,
+  });
+}
+
+function mapCartRpcError(message: string): CartOperationError {
+  if (message.includes("cart_unauthenticated") || message.includes("not authenticated")) {
+    return new CartOperationError("UNAUTHENTICATED");
+  }
+  if (message.includes("cart_stock_limit")) {
+    return new CartOperationError("STOCK_LIMIT");
+  }
+  if (message.includes("cart_variant_unavailable")) {
+    return new CartOperationError("PRODUCT_UNAVAILABLE");
+  }
+  if (message.includes("cart_quantity_invalid")) {
+    return new CartOperationError("STOCK_LIMIT");
+  }
+  return new CartOperationError("REQUEST");
 }
 
 export async function findUserCart(client: Client, userId: string) {
@@ -25,26 +52,11 @@ export async function findUserCart(client: Client, userId: string) {
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw new CartOperationError("REQUEST");
-  return data;
-}
-
-export async function getOrCreateUserCart(client: Client, userId: string) {
-  const existingCart = await findUserCart(client, userId);
-  if (existingCart) return existingCart;
-
-  const { data: createdCart, error: createError } = await client
-    .from("carts")
-    .insert({ user_id: userId })
-    .select("id")
-    .single();
-  if (!createError) return createdCart;
-
-  if (createError.code === "23505") {
-    const racedCart = await findUserCart(client, userId);
-    if (racedCart) return racedCart;
+  if (error) {
+    logCartDatabaseError("Cart lookup", error);
+    throw new CartOperationError("REQUEST");
   }
-  throw new CartOperationError("REQUEST");
+  return data;
 }
 
 export async function getCurrentCartQuantity(client: Client) {
@@ -65,81 +77,84 @@ export async function getCurrentCartQuantity(client: Client) {
   return (data ?? []).reduce((total, item) => total + item.quantity, 0);
 }
 
-export async function addProductToCart(client: Client, productId: string) {
+/**
+ * Variant must be selected when a product has configured option groups or more
+ * than one sellable variant. Products migrated from the legacy catalog retain
+ * a single default variant, which can still be added directly from ProductCard.
+ */
+export async function addProductToCart(
+  client: Client,
+  productId: string,
+  variantId?: string,
+  quantity = 1,
+) {
   const {
     data: { user },
     error: authError,
   } = await client.auth.getUser();
   if (authError || !user) throw new CartOperationError("UNAUTHENTICATED");
 
-  const { data: product, error: productError } = await client
-    .from("products")
-    .select("id, stock, status")
-    .eq("id", productId)
-    .maybeSingle();
-  if (productError) throw new CartOperationError("REQUEST");
-  if (!product) throw new CartOperationError("PRODUCT_UNAVAILABLE");
-  if (product.stock <= 0) throw new CartOperationError("OUT_OF_STOCK");
-  if (product.status !== "active") {
-    throw new CartOperationError("PRODUCT_UNAVAILABLE");
-  }
+  let selectedVariantId = variantId;
+  if (!selectedVariantId) {
+    const [{ data: variants, error: variantsError }, { data: groups, error: groupsError }] =
+      await Promise.all([
+        client
+          .from("product_variants")
+          .select("id")
+          .eq("product_id", productId)
+          .eq("status", "active"),
+        client
+          .from("product_option_groups")
+          .select("id")
+          .eq("product_id", productId),
+      ]);
 
-  const cart = await getOrCreateUserCart(client, user.id);
-  const { data: existingItem, error: itemError } = await client
-    .from("cart_items")
-    .select("id, quantity")
-    .eq("cart_id", cart.id)
-    .eq("product_id", product.id)
-    .maybeSingle();
-  if (itemError) throw new CartOperationError("REQUEST");
-
-  if (existingItem) {
-    const nextQuantity = existingItem.quantity + 1;
-    if (nextQuantity > product.stock) {
-      throw new CartOperationError("STOCK_LIMIT");
+    if (variantsError || groupsError) throw new CartOperationError("REQUEST");
+    if ((groups?.length ?? 0) > 0 || (variants?.length ?? 0) !== 1) {
+      throw new CartOperationError("OPTION_REQUIRED");
     }
-    const { data: updatedItem, error: updateError } = await client
-      .from("cart_items")
-      .update({ quantity: nextQuantity })
-      .eq("id", existingItem.id)
-      .eq("cart_id", cart.id)
-      .select("id")
-      .maybeSingle();
-    if (updateError || !updatedItem) throw new CartOperationError("REQUEST");
-    return cart.id;
+    selectedVariantId = variants![0].id;
   }
 
-  const { error: insertError } = await client.from("cart_items").insert({
-    cart_id: cart.id,
-    product_id: product.id,
-    quantity: 1,
+  const { data: cartId, error } = await client.rpc("cart_add_variant", {
+    p_product_id: productId,
+    p_variant_id: selectedVariantId,
+    p_quantity: quantity,
   });
-  if (!insertError) return cart.id;
-
-  if (insertError.code === "23505") {
-    const { data: racedItem, error: racedItemError } = await client
-      .from("cart_items")
-      .select("id, quantity")
-      .eq("cart_id", cart.id)
-      .eq("product_id", product.id)
-      .maybeSingle();
-    if (!racedItemError && racedItem) {
-      const nextQuantity = racedItem.quantity + 1;
-      if (nextQuantity > product.stock) {
-        throw new CartOperationError("STOCK_LIMIT");
-      }
-      const { data: updatedItem, error: updateError } = await client
-        .from("cart_items")
-        .update({ quantity: nextQuantity })
-        .eq("id", racedItem.id)
-        .eq("cart_id", cart.id)
-        .select("id")
-        .maybeSingle();
-      if (!updateError && updatedItem) return cart.id;
-    }
+  if (error) {
+    logCartDatabaseError("cart_add_variant RPC", error);
+    throw mapCartRpcError(error.message);
+  }
+  if (!cartId) {
+    console.error("[Cart] cart_add_variant RPC returned no cart ID.");
+    throw new CartOperationError("REQUEST");
   }
 
-  throw new CartOperationError("REQUEST");
+  return cartId;
+}
+
+export async function updateCartItemQuantity(
+  client: Client,
+  cartItemId: string,
+  quantity: number,
+) {
+  const { error } = await client.rpc("cart_update_item_quantity", {
+    p_cart_item_id: cartItemId,
+    p_quantity: quantity,
+  });
+  if (error) throw mapCartRpcError(error.message);
+}
+
+export async function removeCartItem(client: Client, cartItemId: string) {
+  const { error } = await client.rpc("cart_remove_item", {
+    p_cart_item_id: cartItemId,
+  });
+  if (error) throw mapCartRpcError(error.message);
+}
+
+export async function clearCartItems(client: Client) {
+  const { error } = await client.rpc("cart_clear_items");
+  if (error) throw mapCartRpcError(error.message);
 }
 
 export function dispatchCartUpdated() {

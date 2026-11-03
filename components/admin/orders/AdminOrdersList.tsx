@@ -6,6 +6,11 @@ import { Loader2, Search } from "lucide-react";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient } from "@/lib/supabase/client";
 import type { Database, Json } from "@/lib/supabase/database";
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_OPTIONS,
+  type OrderStatus,
+} from "@/lib/order-status";
 
 type Order = Pick<
   Database["public"]["Tables"]["orders"]["Row"],
@@ -30,13 +35,7 @@ type CustomerProfile = NonNullable<Order["profile"]>;
 type ShippingAddress = { recipient_name?: string; phone_number?: string };
 
 type PaymentFilter = "all" | "pending" | "paid" | "failed" | "refunded";
-type OrderFilter =
-  | "all"
-  | "pending"
-  | "processing"
-  | "shipped"
-  | "completed"
-  | "cancelled";
+type OrderFilter = "all" | OrderStatus;
 
 const paymentFilters: { value: PaymentFilter; label: string }[] = [
   { value: "all", label: "Semua pembayaran" },
@@ -48,11 +47,7 @@ const paymentFilters: { value: PaymentFilter; label: string }[] = [
 
 const orderFilters: { value: OrderFilter; label: string }[] = [
   { value: "all", label: "Semua pesanan" },
-  { value: "pending", label: "Menunggu Diproses" },
-  { value: "processing", label: "Diproses" },
-  { value: "shipped", label: "Dikirim" },
-  { value: "completed", label: "Selesai" },
-  { value: "cancelled", label: "Dibatalkan" },
+  ...ORDER_STATUS_OPTIONS,
 ];
 
 const paymentLabels: Record<string, string> = {
@@ -60,14 +55,6 @@ const paymentLabels: Record<string, string> = {
   paid: "Dibayar",
   failed: "Gagal",
   refunded: "Refund",
-};
-
-const orderLabels: Record<string, string> = {
-  pending: "Menunggu Diproses",
-  processing: "Diproses",
-  shipped: "Dikirim",
-  completed: "Selesai",
-  cancelled: "Dibatalkan",
 };
 
 function formatDate(value: string) {
@@ -93,7 +80,7 @@ function getSnapshotCustomer(value: Json): ShippingAddress {
 }
 
 function badgeClass(status: string) {
-  if (["paid", "completed"].includes(status)) {
+  if (["paid", "delivered", "completed"].includes(status)) {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
   if (["failed", "cancelled"].includes(status)) {
@@ -320,7 +307,8 @@ export default function AdminOrdersList() {
                     <span
                       className={`rounded-full border px-2.5 py-1 text-xs font-bold ${badgeClass(order.order_status)}`}
                     >
-                      {orderLabels[order.order_status] ?? order.order_status}
+                      {ORDER_STATUS_LABELS[order.order_status] ??
+                        order.order_status}
                     </span>
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
@@ -380,7 +368,7 @@ export default function AdminOrdersList() {
                         <span
                           className={`rounded-full border px-2.5 py-1 text-xs font-bold ${badgeClass(order.order_status)}`}
                         >
-                          {orderLabels[order.order_status] ??
+                          {ORDER_STATUS_LABELS[order.order_status] ??
                             order.order_status}
                         </span>
                       </td>

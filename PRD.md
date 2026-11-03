@@ -48,19 +48,19 @@
 ### 5.1. User/Customer Module
 | ID | Fitur | Deskripsi & Acceptance Criteria |
 | :--- | :--- | :--- |
-| **FR-U1** | **Pencarian Resi** | Pengguna dapat memasukkan ID Pesanan (misal: `OKR-2026-001`) atau Email untuk melacak paket. |
-| **FR-U2** | **Keamanan Captcha** | Form pencarian resi dilengkapi validasi matematika sederhana (misal: `8 + 9 = ?`). Sistem menolak pencarian jika jawaban salah. |
-| **FR-U3** | **Timeline UI** | Menampilkan detail barang dan daftar histori perjalanan paket secara kronologis vertikal (titik lokasi dan waktu). |
+| **FR-U1** | **Tracking Pesanan** | Pengguna yang login dapat membuka detail pesanan miliknya untuk melihat status order, resi, dan riwayat pengiriman yang tersedia. |
+| **FR-U2** | **Privasi Tracking** | Data pesanan dan shipment hanya dapat dibaca pemilik pesanan atau admin; pencarian publik berbasis email tidak digunakan. |
+| **FR-U3** | **Timeline UI** | Menampilkan alur status pesanan dan, secara terpisah, riwayat shipment dari `shipment_logs` secara kronologis. |
 | **FR-U4** | **Katalog PO** | Menampilkan daftar produk dengan harga, status slot, dan *countdown deadline* PO. |
 | **FR-U5** | **User Auth** | Pengguna dapat melakukan registrasi dan *login* menggunakan sistem autentikasi Supabase. |
-| **FR-U6** | **User Dashboard** | Pengguna yang *login* dapat melihat tabel riwayat pesanan (PO & Resi) milik mereka sendiri. |
+| **FR-U6** | **User Dashboard** | Pengguna yang *login* dapat melihat daftar pesanan miliknya dan membuka detail order untuk status serta tracking shipment. |
 
 ### 5.2. Admin Dashboard Module
 | ID | Fitur | Deskripsi & Acceptance Criteria |
 | :--- | :--- | :--- |
 | **FR-A1** | **Admin Auth** | Halaman dasbor dilindungi proteksi rute (*Route Guard*) khusus pengguna dengan *role* 'admin'. |
 | **FR-A2** | **Order Management** | Admin dapat menambah (*Create*), mengedit (*Update*), atau menghapus (*Delete*) data pesanan secara manual. |
-| **FR-A3** | **Timeline Update** | Admin dapat menyisipkan log perjalanan baru ke dalam resi tertentu, yang otomatis mengubah `current_status` pesanan. |
+| **FR-A3** | **Timeline Update** | Admin mencatat log dan memperbarui `shipments.current_status` secara atomik. Konfirmasi `DELIVERED` memajukan `orders.order_status` dari `shipped` ke `delivered`; kedua status tetap berbeda. Tidak ada integrasi kurir real-time. |
 | **FR-A4** | **Catalog Management** | Admin dapat mengelola produk (Unggah gambar, atur harga, edit deskripsi, dan buka/tutup kuota). |
 
 ---
@@ -91,16 +91,20 @@
 
 **2. Tabel `orders`**
 * `id` (UUID, Primary Key)
-* `user_id` (UUID, Foreign Key ke `profiles`, *nullable*)
+* `user_id` (UUID, Foreign Key ke `profiles`)
 * `order_number` (String, Unique)
-* `item_name`, `origin_country`, `current_status`
+* `order_status`: `pending` → `processing` → `shipped` → `delivered` → `completed`, atau `cancelled` sebelum pengiriman.
 
-**3. Tabel `order_histories`**
-* `id` (UUID, Primary Key)
-* `order_id` (UUID, Foreign Key ke `orders`)
-* `status_title`, `location`, `notes`, `created_at` (Timestamp)
+**3. Tabel `shipments`**
+* `order_id` (UUID, satu shipment per order)
+* `tracking_number` (Unique)
+* `current_status` (status rute shipment, terpisah dari `orders.order_status`)
 
-**4. Tabel `products`**
+**4. Tabel `shipment_logs`**
+* `shipment_id` (UUID, Foreign Key ke `shipments`)
+* `status_title`, `location`, `description`, `created_at` (Timestamp)
+
+**5. Tabel `products`**
 * `id` (UUID, Primary Key)
 * `title`, `price`, `po_deadline` (Date), `status` (Open/Closed)
 

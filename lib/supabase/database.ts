@@ -1,3 +1,6 @@
+import type { OrderStatus } from "../order-status";
+import type { ShipmentStatus } from "../shipment-status";
+
 export type Json =
   | string
   | number
@@ -8,6 +11,8 @@ export type Json =
 
 export type ProfileRole = "customer" | "admin";
 export type ProductStatus = "active" | "inactive" | "out_of_stock";
+export type ProductVariantStatus = "active" | "inactive" | "out_of_stock";
+export type InventoryMovementType = "checkout_decrement" | "order_cancel_restore" | "admin_adjustment";
 export type PreorderEventStatus = "draft" | "active" | "closed" | "cancelled";
 export type FeaturedEventMediaType = "image" | "video";
 
@@ -170,6 +175,220 @@ export interface Database {
         };
         Relationships: [];
       };
+      product_option_groups: {
+        Row: {
+          id: string;
+          product_id: string;
+          name: string;
+          is_required: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          name: string;
+          is_required?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          name?: string;
+          is_required?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_option_groups_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_option_values: {
+        Row: {
+          id: string;
+          product_id: string;
+          option_group_id: string;
+          value: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          option_group_id: string;
+          value: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          option_group_id?: string;
+          value?: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_option_values_group_product_fkey";
+            columns: ["option_group_id", "product_id"];
+            isOneToOne: false;
+            referencedRelation: "product_option_groups";
+            referencedColumns: ["id", "product_id"];
+          },
+        ];
+      };
+      product_variants: {
+        Row: {
+          id: string;
+          product_id: string;
+          sku: string;
+          label: string;
+          price: number;
+          stock: number;
+          status: ProductVariantStatus;
+          image_url: string | null;
+          option_signature: string[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          sku: string;
+          label?: string;
+          price: number;
+          stock?: number;
+          status?: ProductVariantStatus;
+          image_url?: string | null;
+          option_signature?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          sku?: string;
+          label?: string;
+          price?: number;
+          stock?: number;
+          status?: ProductVariantStatus;
+          image_url?: string | null;
+          option_signature?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_variant_option_values: {
+        Row: {
+          variant_id: string;
+          product_id: string;
+          option_group_id: string;
+          option_value_id: string;
+        };
+        Insert: {
+          variant_id: string;
+          product_id: string;
+          option_group_id: string;
+          option_value_id: string;
+        };
+        Update: {
+          variant_id?: string;
+          product_id?: string;
+          option_group_id?: string;
+          option_value_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_variant_option_values_variant_product_fkey";
+            columns: ["variant_id", "product_id"];
+            isOneToOne: false;
+            referencedRelation: "product_variants";
+            referencedColumns: ["id", "product_id"];
+          },
+          {
+            foreignKeyName: "product_variant_option_values_value_product_group_fkey";
+            columns: ["option_value_id", "product_id", "option_group_id"];
+            isOneToOne: false;
+            referencedRelation: "product_option_values";
+            referencedColumns: ["id", "product_id", "option_group_id"];
+          },
+        ];
+      };
+      inventory_movements: {
+        Row: {
+          id: string;
+          variant_id: string;
+          order_id: string | null;
+          order_item_id: string | null;
+          movement_type: InventoryMovementType;
+          quantity_delta: number;
+          reason: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          variant_id: string;
+          order_id?: string | null;
+          order_item_id?: string | null;
+          movement_type: InventoryMovementType;
+          quantity_delta: number;
+          reason: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          variant_id?: string;
+          order_id?: string | null;
+          order_item_id?: string | null;
+          movement_type?: InventoryMovementType;
+          quantity_delta?: number;
+          reason?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_variant_id_fkey";
+            columns: ["variant_id"];
+            isOneToOne: false;
+            referencedRelation: "product_variants";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_movements_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_movements_order_item_id_fkey";
+            columns: ["order_item_id"];
+            isOneToOne: false;
+            referencedRelation: "order_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       preorder_events: {
         Row: {
           id: string;
@@ -317,7 +536,7 @@ export interface Database {
           discount: number;
           total_price: number;
           payment_status: string;
-          order_status: string;
+          order_status: OrderStatus;
           shipping_address: Json;
           notes: string;
           created_at: string;
@@ -332,7 +551,7 @@ export interface Database {
           discount: number;
           total_price: number;
           payment_status: string;
-          order_status: string;
+          order_status: OrderStatus;
           shipping_address: Json;
           notes: string;
           created_at?: string;
@@ -347,7 +566,7 @@ export interface Database {
           discount?: number;
           total_price?: number;
           payment_status?: string;
-          order_status?: string;
+          order_status?: OrderStatus;
           shipping_address?: Json;
           notes?: string;
           created_at?: string;
@@ -372,6 +591,10 @@ export interface Database {
           quantity: number;
           unit_price: number;
           subtotal: number;
+          variant_id: string | null;
+          variant_sku_snapshot: string | null;
+          variant_label_snapshot: string | null;
+          variant_options_snapshot: Json | null;
           created_at: string;
         };
         Insert: {
@@ -382,6 +605,10 @@ export interface Database {
           quantity: number;
           unit_price: number;
           subtotal: number;
+          variant_id?: string | null;
+          variant_sku_snapshot?: string | null;
+          variant_label_snapshot?: string | null;
+          variant_options_snapshot?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -392,6 +619,10 @@ export interface Database {
           quantity?: number;
           unit_price?: number;
           subtotal?: number;
+          variant_id?: string | null;
+          variant_sku_snapshot?: string | null;
+          variant_label_snapshot?: string | null;
+          variant_options_snapshot?: Json | null;
           created_at?: string;
         };
         Relationships: [
@@ -408,6 +639,13 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "products";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_items_variant_product_fkey";
+            columns: ["variant_id", "product_id"];
+            isOneToOne: false;
+            referencedRelation: "product_variants";
+            referencedColumns: ["id", "product_id"];
           },
         ];
       };
@@ -446,6 +684,7 @@ export interface Database {
           cart_id: string;
           product_id: string;
           quantity: number;
+          variant_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -454,6 +693,7 @@ export interface Database {
           cart_id: string;
           product_id: string;
           quantity: number;
+          variant_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -462,6 +702,7 @@ export interface Database {
           cart_id?: string;
           product_id?: string;
           quantity?: number;
+          variant_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -479,6 +720,13 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "products";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cart_items_variant_product_fkey";
+            columns: ["variant_id", "product_id"];
+            isOneToOne: false;
+            referencedRelation: "product_variants";
+            referencedColumns: ["id", "product_id"];
           },
         ];
       };
@@ -543,7 +791,7 @@ export interface Database {
           id: string;
           order_id: string;
           tracking_number: string;
-          current_status: string;
+          current_status: ShipmentStatus;
           created_at: string;
           updated_at: string;
         };
@@ -551,7 +799,7 @@ export interface Database {
           id?: string;
           order_id: string;
           tracking_number: string;
-          current_status: string;
+          current_status: ShipmentStatus;
           created_at?: string;
           updated_at?: string;
         };
@@ -559,7 +807,7 @@ export interface Database {
           id?: string;
           order_id?: string;
           tracking_number?: string;
-          current_status?: string;
+          current_status?: ShipmentStatus;
           created_at?: string;
           updated_at?: string;
         };
@@ -726,9 +974,23 @@ export interface Database {
         Returns: string;
       };
       admin_update_order_status: {
-        Args: { p_order_id: string; p_order_status: string };
+        Args: { p_order_id: string; p_order_status: OrderStatus };
         Returns: undefined;
       };
+      admin_create_shipment: {
+        Args: { p_order_id: string; p_tracking_number: string };
+        Returns: string;
+      };
+      admin_record_shipment_update: {
+        Args: {
+          p_shipment_id: string;
+          p_status: ShipmentStatus;
+          p_location: string | null;
+          p_description: string;
+        };
+        Returns: undefined;
+      };
+
       admin_create_featured_event: {
         Args: {
           p_title: string;
@@ -766,6 +1028,114 @@ export interface Database {
       };
       admin_update_featured_event_status: {
         Args: { p_event_id: string; p_is_active: boolean };
+        Returns: string;
+      };
+      admin_create_product_option_group: {
+        Args: {
+          p_product_id: string;
+          p_name: string;
+          p_is_required: boolean;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_create_product_option_value: {
+        Args: {
+          p_option_group_id: string;
+          p_value: string;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_update_product_option_group: {
+        Args: {
+          p_option_group_id: string;
+          p_name: string;
+          p_is_required: boolean;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_update_product_option_value: {
+        Args: {
+          p_option_value_id: string;
+          p_value: string;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_create_product_variant: {
+        Args: {
+          p_product_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+        };
+        Returns: string;
+      };
+      admin_update_product_variant: {
+        Args: {
+          p_variant_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+        };
+        Returns: string;
+      };
+      admin_set_variant_option_values: {
+        Args: { p_variant_id: string; p_option_value_ids: string[] };
+        Returns: undefined;
+      };
+      admin_create_product_variant_with_options: {
+        Args: {
+          p_product_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+          p_option_value_ids: string[];
+        };
+        Returns: string;
+      };
+      admin_update_product_variant_with_options: {
+        Args: {
+          p_variant_id: string;
+          p_sku: string;
+          p_label: string;
+          p_price: number;
+          p_stock: number;
+          p_status: ProductVariantStatus;
+          p_image_url: string | null;
+          p_option_value_ids: string[];
+        };
+        Returns: string;
+      };
+      cart_add_variant: {
+        Args: { p_product_id: string; p_variant_id: string; p_quantity: number };
+        Returns: string;
+      };
+      cart_update_item_quantity: {
+        Args: { p_cart_item_id: string; p_quantity: number };
+        Returns: undefined;
+      };
+      cart_remove_item: {
+        Args: { p_cart_item_id: string };
+        Returns: undefined;
+      };
+      cart_clear_items: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
+      checkout_catalog_variant: {
+        Args: { p_address_id: string };
         Returns: string;
       };
       checkout_catalog: {
