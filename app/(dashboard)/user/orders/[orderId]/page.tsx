@@ -7,8 +7,24 @@ import { Check, Circle, CircleDot, Loader2, PackageOpen } from "lucide-react";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database, Json } from "@/lib/supabase/database";
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_TIMELINE_STEPS,
+  orderTimelineProgress,
+} from "@/lib/order-status";
+import {
+  shipmentStatusLabel,
+} from "@/lib/shipment-status";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
+type Shipment = Pick<
+  Database["public"]["Tables"]["shipments"]["Row"],
+  "id" | "tracking_number" | "current_status" | "updated_at"
+>;
+type ShipmentLog = Pick<
+  Database["public"]["Tables"]["shipment_logs"]["Row"],
+  "id" | "status_title" | "location" | "description" | "created_at"
+>;
 type OrderItem = Pick<
   Database["public"]["Tables"]["order_items"]["Row"],
   | "id"
@@ -35,29 +51,6 @@ const paymentLabels: Record<string, string> = {
   paid: "Pembayaran Berhasil",
   failed: "Pembayaran Gagal",
   refunded: "Dana Dikembalikan",
-};
-
-const orderLabels: Record<string, string> = {
-  pending: "Menunggu Diproses",
-  processing: "Sedang Diproses",
-  shipped: "Sedang Dikirim",
-  completed: "Selesai",
-  cancelled: "Dibatalkan",
-};
-
-const timelineSteps = [
-  "Pesanan Dibuat",
-  "Pembayaran Berhasil",
-  "Diproses",
-  "Dikirim",
-  "Selesai",
-];
-
-const timelineProgress: Record<string, number> = {
-  pending: 1,
-  processing: 2,
-  shipped: 3,
-  completed: 5,
 };
 
 function isRecord(value: Json): value is { [key: string]: Json | undefined } {
@@ -96,6 +89,8 @@ export default function OrderResultPage() {
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
+  const [shipment, setShipment] = useState<Shipment | null>(null);
+  const [shipmentLogs, setShipmentLogs] = useState<ShipmentLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -141,9 +136,29 @@ export default function OrderResultPage() {
           .order("created_at", { ascending: true });
         if (itemsError) throw itemsError;
 
+        const { data: shipmentData, error: shipmentError } = await supabase
+          .from("shipments")
+          .select("id, tracking_number, current_status, updated_at")
+          .eq("order_id", orderData.id)
+          .maybeSingle();
+        if (shipmentError) throw shipmentError;
+
+        let shipmentLogData: ShipmentLog[] = [];
+        if (shipmentData) {
+          const { data: logs, error: logsError } = await supabase
+            .from("shipment_logs")
+            .select("id, status_title, location, description, created_at")
+            .eq("shipment_id", shipmentData.id)
+            .order("created_at", { ascending: true });
+          if (logsError) throw logsError;
+          shipmentLogData = logs ?? [];
+        }
+
         if (isMounted) {
           setOrder(orderData);
           setItems(itemData ?? []);
+          setShipment(shipmentData);
+          setShipmentLogs(shipmentLogData);
         }
       } catch {
         if (isMounted) setLoadError(true);
@@ -236,7 +251,8 @@ export default function OrderResultPage() {
               <div>
                 <p className="text-xs text-slate-500">Status Pesanan</p>
                 <p className="mt-1 font-semibold text-slate-800">
-                  {orderLabels[order.order_status] ?? order.order_status}
+                  {ORDER_STATUS_LABELS[order.order_status] ??
+                    order.order_status}
                 </p>
               </div>
             </div>
@@ -374,8 +390,8 @@ export default function OrderResultPage() {
               </div>
             ) : (
               <ol className="mt-5 grid gap-4 sm:grid-cols-5">
-                {timelineSteps.map((step, index) => {
-                  const progress = timelineProgress[order.order_status] ?? 1;
+                {ORDER_TIMELINE_STEPS.map((step, index) => {
+                  const progress = orderTimelineProgress(order.order_status);
                   const isComplete = index < progress;
                   const isCurrent = index === progress;
                   const Icon = isComplete
@@ -386,7 +402,7 @@ export default function OrderResultPage() {
 
                   return (
                     <li
-                      key={step}
+                      key={step.status}
                       aria-current={isCurrent ? "step" : undefined}
                       className="flex items-start gap-3 sm:flex-col sm:gap-2"
                     >
@@ -398,7 +414,7 @@ export default function OrderResultPage() {
                       <span
                         className={`pt-1 text-sm font-semibold sm:pt-0 ${isComplete || isCurrent ? "text-[#0F3854]" : "text-slate-400"}`}
                       >
-                        {step}
+                        {step.label}
                         {isCurrent && (
                           <span className="ml-1 text-xs font-normal text-slate-500">
                             (Saat ini)
@@ -409,6 +425,58 @@ export default function OrderResultPage() {
                   );
                 })}
               </ol>
+            )}
+          </section>
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+            <h2 className="text-base font-extrabold text-[#0F3854]">
+              Informasi Pengiriman
+            </h2>
+            {!shipment ? (
+              <p className="mt-3 text-sm text-slate-500">
+                Nomor resi dan riwayat pengiriman belum tersedia.
+              </p>
+            ) : (
+              <>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-slate-500">Nomor resi</dt>
+                    <dd className="mt-1 break-all font-bold text-slate-800">
+                      {shipment.tracking_number}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">Status pengiriman</dt>
+                    <dd className="mt-1 font-bold text-slate-800">
+                      {shipmentStatusLabel(shipment.current_status)}
+                    </dd>
+                  </div>
+                </dl>
+                {shipmentLogs.length > 0 ? (
+                  <ol className="mt-5 space-y-4 border-l border-slate-200 pl-4">
+                    {shipmentLogs.map((log) => (
+                      <li key={log.id} className="relative">
+                        <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#3c8aba]" />
+                        <p className="font-bold text-slate-800">
+                          {shipmentStatusLabel(log.status_title)}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatDate(log.created_at)}
+                          {log.location ? ` · ${log.location}` : ""}
+                        </p>
+                        {log.description && (
+                          <p className="mt-1 text-sm text-slate-600">
+                            {log.description}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Belum ada riwayat perjalanan pengiriman.
+                  </p>
+                )}
+              </>
             )}
           </section>
         </>

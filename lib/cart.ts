@@ -20,6 +20,16 @@ export class CartOperationError extends Error {
   }
 }
 
+function logCartDatabaseError(
+  operation: string,
+  error: { code: string; message: string },
+) {
+  console.error(`[Cart] ${operation} failed`, {
+    code: error.code,
+    message: error.message,
+  });
+}
+
 function mapCartRpcError(message: string): CartOperationError {
   if (message.includes("cart_unauthenticated") || message.includes("not authenticated")) {
     return new CartOperationError("UNAUTHENTICATED");
@@ -42,7 +52,10 @@ export async function findUserCart(client: Client, userId: string) {
     .select("id")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) throw new CartOperationError("REQUEST");
+  if (error) {
+    logCartDatabaseError("Cart lookup", error);
+    throw new CartOperationError("REQUEST");
+  }
   return data;
 }
 
@@ -103,16 +116,21 @@ export async function addProductToCart(
     selectedVariantId = variants![0].id;
   }
 
-  const { error } = await client.rpc("cart_add_variant", {
+  const { data: cartId, error } = await client.rpc("cart_add_variant", {
     p_product_id: productId,
     p_variant_id: selectedVariantId,
     p_quantity: quantity,
   });
-  if (error) throw mapCartRpcError(error.message);
+  if (error) {
+    logCartDatabaseError("cart_add_variant RPC", error);
+    throw mapCartRpcError(error.message);
+  }
+  if (!cartId) {
+    console.error("[Cart] cart_add_variant RPC returned no cart ID.");
+    throw new CartOperationError("REQUEST");
+  }
 
-  const cart = await findUserCart(client, user.id);
-  if (!cart) throw new CartOperationError("REQUEST");
-  return cart.id;
+  return cartId;
 }
 
 export async function updateCartItemQuantity(

@@ -7,6 +7,14 @@ import { Check, Circle, CircleDot, Loader2, PackageOpen } from "lucide-react";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient } from "@/lib/supabase/client";
 import type { Database, Json } from "@/lib/supabase/database";
+import {
+  canTransitionOrderStatus,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_OPTIONS,
+  ORDER_TIMELINE_STEPS,
+  orderTimelineProgress,
+  type OrderStatus,
+} from "@/lib/order-status";
 
 type Order = Pick<
   Database["public"]["Tables"]["orders"]["Row"],
@@ -38,12 +46,6 @@ type OrderItem = Pick<
   | "variant_label_snapshot"
   | "variant_options_snapshot"
 >;
-type OrderStatus =
-  | "pending"
-  | "processing"
-  | "shipped"
-  | "completed"
-  | "cancelled";
 type ShippingAddress = {
   label?: string;
   recipient_name?: string;
@@ -54,37 +56,11 @@ type ShippingAddress = {
   postal_code?: string;
 };
 
-const orderStatuses: { value: OrderStatus; label: string }[] = [
-  { value: "pending", label: "Menunggu Diproses" },
-  { value: "processing", label: "Diproses" },
-  { value: "shipped", label: "Dikirim" },
-  { value: "completed", label: "Selesai" },
-  { value: "cancelled", label: "Dibatalkan" },
-];
-
 const paymentLabels: Record<string, string> = {
   pending: "Menunggu Pembayaran",
   paid: "Dibayar",
   failed: "Gagal",
   refunded: "Refund",
-};
-
-const orderLabels: Record<string, string> = Object.fromEntries(
-  orderStatuses.map(({ value, label }) => [value, label]),
-);
-
-const timelineSteps = [
-  "Pesanan Dibuat",
-  "Menunggu Diproses",
-  "Diproses",
-  "Dikirim",
-  "Selesai",
-];
-const timelineProgress: Record<string, number> = {
-  pending: 1,
-  processing: 2,
-  shipped: 3,
-  completed: 5,
 };
 
 function isRecord(value: Json): value is { [key: string]: Json | undefined } {
@@ -116,17 +92,6 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function canTransition(current: string, next: OrderStatus) {
-  if (current === next) return true;
-  if (current === "pending")
-    return next === "processing" || next === "cancelled";
-  if (current === "processing")
-    return next === "shipped" || next === "cancelled";
-  if (current === "shipped")
-    return next === "completed";
-  return false;
 }
 
 export default function AdminOrderDetails() {
@@ -191,12 +156,12 @@ export default function AdminOrderDetails() {
 
   async function updateOrderStatus(nextStatus: OrderStatus) {
     if (!order || isSaving || nextStatus === order.order_status) return;
-    if (!canTransition(order.order_status, nextStatus)) {
+    if (!canTransitionOrderStatus(order.order_status, nextStatus)) {
       setError("Perubahan status tersebut tidak diizinkan.");
       return;
     }
 
-    const nextLabel = orderLabels[nextStatus] ?? nextStatus;
+    const nextLabel = ORDER_STATUS_LABELS[nextStatus] ?? nextStatus;
     if (
       !window.confirm(
         `Ubah status pesanan ${order.order_number} menjadi "${nextLabel}"?`,
@@ -332,7 +297,8 @@ export default function AdminOrderDetails() {
                   </span>
                   <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800">
                     Pesanan:{" "}
-                    {orderLabels[order.order_status] ?? order.order_status}
+                    {ORDER_STATUS_LABELS[order.order_status] ??
+                      order.order_status}
                   </span>
                 </div>
               </div>
@@ -352,11 +318,13 @@ export default function AdminOrderDetails() {
                   }
                   className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-[#0F3854] outline-none focus:border-[#E5B869] disabled:bg-slate-100"
                 >
-                  {orderStatuses.map(({ value, label }) => (
+                  {ORDER_STATUS_OPTIONS.map(({ value, label }) => (
                     <option
                       key={value}
                       value={value}
-                      disabled={!canTransition(order.order_status, value)}
+                      disabled={
+                        !canTransitionOrderStatus(order.order_status, value)
+                      }
                     >
                       {label}
                     </option>
@@ -533,9 +501,10 @@ export default function AdminOrderDetails() {
                   </p>
                 ) : (
                   <ol className="mt-4 space-y-3">
-                    {timelineSteps.map((step, index) => {
-                      const progress =
-                        timelineProgress[order.order_status] ?? 1;
+                    {ORDER_TIMELINE_STEPS.map((step, index) => {
+                      const progress = orderTimelineProgress(
+                        order.order_status,
+                      );
                       const complete = index < progress;
                       const current = index === progress;
                       const Icon = complete
@@ -544,7 +513,7 @@ export default function AdminOrderDetails() {
                           ? CircleDot
                           : Circle;
                       return (
-                        <li key={step} className="flex items-center gap-3">
+                        <li key={step.status} className="flex items-center gap-3">
                           <span
                             className={`flex h-7 w-7 items-center justify-center rounded-full ${complete ? "bg-emerald-100 text-emerald-700" : current ? "bg-[#eaf3f8] text-[#0F3854]" : "bg-slate-100 text-slate-400"}`}
                           >
@@ -553,7 +522,7 @@ export default function AdminOrderDetails() {
                           <span
                             className={`text-sm font-semibold ${complete || current ? "text-[#0F3854]" : "text-slate-400"}`}
                           >
-                            {step}
+                            {step.label}
                             {current ? " (Saat ini)" : ""}
                           </span>
                         </li>

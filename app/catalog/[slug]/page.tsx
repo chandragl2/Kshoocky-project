@@ -18,7 +18,19 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
-type Variant = Database["public"]["Tables"]["product_variants"]["Row"];
+type Variant = Pick<
+  Database["public"]["Tables"]["product_variants"]["Row"],
+  | "id"
+  | "product_id"
+  | "sku"
+  | "label"
+  | "price"
+  | "stock"
+  | "status"
+  | "image_url"
+  | "created_at"
+  | "updated_at"
+>;
 type OptionGroup = Database["public"]["Tables"]["product_option_groups"]["Row"];
 type OptionValue = Database["public"]["Tables"]["product_option_values"]["Row"];
 type VariantOptionValue =
@@ -138,9 +150,33 @@ export default function ProductDetailPage() {
     );
   }, [optionGroups, selectedOptions, variantOptionValues, variants]);
 
-  const lowestPrice = variants.length
-    ? Math.min(...variants.map((variant) => variant.price))
+  const sellableVariants = variants.filter(
+    (variant) => variant.status === "active" && variant.stock > 0,
+  );
+  const lowestPrice = sellableVariants.length
+    ? Math.min(...sellableVariants.map((variant) => variant.price))
     : product?.price ?? 0;
+
+  function isOptionValueAvailable(optionGroupId: string, optionValueId: string) {
+    return variants.some((variant) => {
+      if (variant.status !== "active" || variant.stock < 1) return false;
+      const mappings = variantOptionValues.filter(
+        (row) => row.variant_id === variant.id,
+      );
+      const selectedValue = mappings.find(
+        (row) => row.option_group_id === optionGroupId,
+      );
+      if (selectedValue?.option_value_id !== optionValueId) return false;
+      return optionGroups.every((group) => {
+        if (group.id === optionGroupId || !selectedOptions[group.id]) return true;
+        return mappings.some(
+          (row) =>
+            row.option_group_id === group.id &&
+            row.option_value_id === selectedOptions[group.id],
+        );
+      });
+    });
+  }
 
   async function handleAddToCart() {
     if (!product || !selectedVariant || selectedVariant.stock < 1 || isAdding) return;
@@ -262,11 +298,17 @@ export default function ProductDetailPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {values.map((value) => {
                           const active = selectedOptions[group.id] === value.id;
+                          const available = isOptionValueAvailable(
+                            group.id,
+                            value.id,
+                          );
                           return (
                             <button
                               key={value.id}
                               type="button"
                               aria-pressed={active}
+                              aria-disabled={!available}
+                              disabled={!available}
                               onClick={() => {
                                 setSelectedOptions((current) => ({
                                   ...current,
@@ -274,7 +316,7 @@ export default function ProductDetailPage() {
                                 }));
                                 setFeedback("");
                               }}
-                              className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-semibold transition ${active ? "border-[#0F3854] bg-[#0F3854] text-white" : "border-slate-200 bg-white text-slate-700 hover:border-[#0F3854]"}`}
+                              className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-semibold transition ${!available ? "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300" : active ? "border-[#0F3854] bg-[#0F3854] text-white" : "border-slate-200 bg-white text-slate-700 hover:border-[#0F3854]"}`}
                             >
                               {value.value}
                             </button>

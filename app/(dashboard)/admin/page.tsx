@@ -14,6 +14,7 @@ import {
   Loader2,
   LockKeyhole,
   Package,
+  SlidersHorizontal,
   Plus,
   RefreshCw,
   Search,
@@ -27,6 +28,11 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database, ProductStatus } from "@/lib/supabase/database";
 import PreorderManager from "@/components/admin/PreorderManager";
 import FeaturedEventsManager from "@/components/admin/FeaturedEventsManager";
+import {
+  SHIPMENT_STATUS_OPTIONS,
+  nextShipmentStatusOptions,
+  type ShipmentStatus,
+} from "@/lib/shipment-status";
 
 type Tab =
   | "shipments"
@@ -35,12 +41,6 @@ type Tab =
   | "preorder"
   | "featured-events"
   | "settings";
-type ShipmentStatus =
-  | "SEOUL_WH"
-  | "IN_TRANSIT"
-  | "CUSTOMS"
-  | "JAKARTA_WH"
-  | "DELIVERED";
 type Order = {
   id: string;
   order_number: string;
@@ -65,13 +65,6 @@ type Shipment = {
 type Product = Database["public"]["Tables"]["products"]["Row"];
 type ProductImage = Database["public"]["Tables"]["product_images"]["Row"];
 
-const shipmentStatuses: ShipmentStatus[] = [
-  "SEOUL_WH",
-  "IN_TRANSIT",
-  "CUSTOMS",
-  "JAKARTA_WH",
-  "DELIVERED",
-];
 const productStatuses: ProductStatus[] = ["active", "inactive", "out_of_stock"];
 const productImageBucket = "product-images";
 const allowedProductImageTypes: Record<string, string> = {
@@ -288,6 +281,9 @@ export default function AdminPage() {
     isSupabaseConfigured ? createClient() : null,
   );
   const [activeTab, setActiveTab] = useState<Tab>("orders");
+  const [requestedEditProductId, setRequestedEditProductId] = useState<
+    string | null
+  >(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -308,7 +304,7 @@ export default function AdminPage() {
   const [shipmentOrderId, setShipmentOrderId] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [logShipmentId, setLogShipmentId] = useState("");
-  const [logStatus, setLogStatus] = useState<ShipmentStatus>("IN_TRANSIT");
+  const [logStatus, setLogStatus] = useState<ShipmentStatus | "">("");
   const [logLocation, setLogLocation] = useState("");
   const [logDescription, setLogDescription] = useState("");
   const [productTitle, setProductTitle] = useState("");
@@ -320,11 +316,26 @@ export default function AdminPage() {
   const [productStatus, setProductStatus] = useState<ProductStatus>("active");
   const [productIsFeatured, setProductIsFeatured] = useState(false);
   const [isCatalog, setIsCatalog] = useState(true);
+  const [hasProductVariants, setHasProductVariants] = useState(false);
+  const [hasConfiguredOptionGroups, setHasConfiguredOptionGroups] = useState(false);
+  const [isLoadingProductVariantConfig, setIsLoadingProductVariantConfig] = useState(false);
+  const [productVariantConfigError, setProductVariantConfigError] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedProductId = params.get("editProduct");
+    if (params.get("tab") === "products" || requestedProductId) {
+      setActiveTab("products");
+    }
+    if (requestedProductId) {
+      setRequestedEditProductId(requestedProductId);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -541,11 +552,13 @@ export default function AdminPage() {
         setError("Halaman ini hanya dapat diakses oleh admin.");
         return;
       }
-      const { error: insertError } = await supabase.from("shipments").insert({
-        order_id: shipmentOrderId,
-        tracking_number: trackingNumber.trim(),
-        current_status: "SEOUL_WH",
-      });
+      const { error: insertError } = await supabase.rpc(
+        "admin_create_shipment",
+        {
+          p_order_id: shipmentOrderId,
+          p_tracking_number: trackingNumber.trim(),
+        },
+      );
       if (insertError) throw insertError;
       setShipmentOrderId("");
       setTrackingNumber("");
@@ -568,13 +581,15 @@ export default function AdminPage() {
         setError("Halaman ini hanya dapat diakses oleh admin.");
         return;
       }
-      const { error: updateError } = await supabase
-        .from("shipments")
-        .update({
-          current_status: status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+      const { error: updateError } = await supabase.rpc(
+        "admin_record_shipment_update",
+        {
+          p_shipment_id: id,
+          p_status: status,
+          p_location: null,
+          p_description: "Status pengiriman diperbarui oleh admin.",
+        },
+      );
       if (updateError) throw updateError;
       setShipments((items) =>
         items.map((item) =>
@@ -589,7 +604,12 @@ export default function AdminPage() {
 
   async function addShipmentLog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!logShipmentId || !logLocation.trim() || !logDescription.trim()) return;
+    if (
+      !logShipmentId ||
+      !logStatus ||
+      !logLocation.trim() ||
+      !logDescription.trim()
+    ) return;
     if (!supabase) return setError("Supabase belum dikonfigurasi.");
     setIsSaving(true);
     setError("");
@@ -600,23 +620,18 @@ export default function AdminPage() {
         setError("Halaman ini hanya dapat diakses oleh admin.");
         return;
       }
-      const { error: insertError } = await supabase
-        .from("shipment_logs")
-        .insert({
-          shipment_id: logShipmentId,
-          status_title: logStatus,
-          location: logLocation.trim(),
-          description: logDescription.trim(),
-        });
-      if (insertError) throw insertError;
-      const { error: shipmentError } = await supabase
-        .from("shipments")
-        .update({
-          current_status: logStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", logShipmentId);
+      const { error: shipmentError } = await supabase.rpc(
+        "admin_record_shipment_update",
+        {
+          p_shipment_id: logShipmentId,
+          p_status: logStatus,
+          p_location: logLocation.trim(),
+          p_description: logDescription.trim(),
+        },
+      );
       if (shipmentError) throw shipmentError;
+      setLogShipmentId("");
+      setLogStatus("");
       setLogLocation("");
       setLogDescription("");
       showResult("Log perjalanan berhasil ditambahkan.");
@@ -639,11 +654,15 @@ export default function AdminPage() {
     setProductStatus("active");
     setProductIsFeatured(false);
     setIsCatalog(true);
+    setHasProductVariants(false);
+    setHasConfiguredOptionGroups(false);
+    setIsLoadingProductVariantConfig(false);
+    setProductVariantConfigError(false);
     setSelectedProductFiles([]);
     setProductImageInputKey((key) => key + 1);
   }
 
-  function startProductEdit(product: Product) {
+  const startProductEdit = useCallback(async (product: Product) => {
     setEditingProductId(product.id);
     setProductTitle(product.title);
     setProductDescription(product.description ?? "");
@@ -654,11 +673,49 @@ export default function AdminPage() {
     setProductStatus(product.status);
     setProductIsFeatured(product.is_featured);
     setIsCatalog(product.is_catalog);
+    setHasProductVariants(false);
+    setHasConfiguredOptionGroups(false);
+    setIsLoadingProductVariantConfig(Boolean(supabase && product.is_catalog));
+    setProductVariantConfigError(false);
     setSelectedProductFiles([]);
     setProductImageInputKey((key) => key + 1);
     setError("");
     setNotice("");
-  }
+    if (!supabase || !product.is_catalog) return;
+
+    const { data, error: optionGroupsError } = await supabase
+      .from("product_option_groups")
+      .select("id")
+      .eq("product_id", product.id)
+      .limit(1);
+    if (optionGroupsError) {
+      setProductVariantConfigError(true);
+      setIsLoadingProductVariantConfig(false);
+      setError("Status variasi produk gagal dimuat. Coba muat ulang sebelum mengedit produk.");
+      return;
+    }
+    const configured = (data?.length ?? 0) > 0;
+    setHasProductVariants(configured);
+    setHasConfiguredOptionGroups(configured);
+    setIsLoadingProductVariantConfig(false);
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!requestedEditProductId || isLoading || isAdmin === null) return;
+    if (!isAdmin) {
+      setRequestedEditProductId(null);
+      return;
+    }
+    const product = products.find(
+      (candidate) => candidate.id === requestedEditProductId,
+    );
+    if (product) {
+      startProductEdit(product);
+    } else if (!error) {
+      setError("Produk yang akan diedit tidak ditemukan di daftar admin.");
+    }
+    setRequestedEditProductId(null);
+  }, [error, isAdmin, isLoading, products, requestedEditProductId, startProductEdit]);
 
   function productImagesFor(productId: string) {
     return productImages
@@ -1017,7 +1074,10 @@ export default function AdminPage() {
         stock,
         image_url: productImageUrl.trim() || null,
         is_catalog: isCatalog,
-        status: productStatus,
+        status:
+          hasProductVariants && !hasConfiguredOptionGroups
+            ? "inactive"
+            : productStatus,
         is_featured: productIsFeatured,
       };
 
@@ -1047,23 +1107,38 @@ export default function AdminPage() {
         );
         createdProduct = true;
         setEditingProductId(savedProductId);
+        if (hasProductVariants && !hasConfiguredOptionGroups) {
+          setProductStatus("inactive");
+        }
       }
 
       if (savedProductId && selectedProductFiles.length > 0) {
         await uploadProductImages(savedProductId, selectedProductFiles);
       }
 
-      resetProductForm();
-      await loadData();
-      showResult(
-        createdProduct
-          ? hasNewPhotos
-            ? "Produk dan foto berhasil ditambahkan."
-            : "Produk berhasil ditambahkan."
-          : hasNewPhotos
-            ? "Produk dan foto berhasil diperbarui."
-            : "Produk berhasil diperbarui.",
-      );
+      if (hasProductVariants && !hasConfiguredOptionGroups) {
+        setSelectedProductFiles([]);
+        setProductImageInputKey((key) => key + 1);
+        await loadData();
+        setProductStatus("inactive");
+        showResult(
+          createdProduct
+            ? "Produk berhasil dibuat. Lanjutkan dengan mengatur opsi dan varian yang dijual."
+            : "Produk disimpan nonaktif. Lanjutkan dengan mengatur opsi dan varian yang dijual.",
+        );
+      } else {
+        resetProductForm();
+        await loadData();
+        showResult(
+          createdProduct
+            ? hasNewPhotos
+              ? "Produk dan foto berhasil ditambahkan."
+              : "Produk berhasil ditambahkan."
+            : hasNewPhotos
+              ? "Produk dan foto berhasil diperbarui."
+              : "Produk berhasil diperbarui.",
+        );
+      }
     } catch (saveError) {
       if (saveError instanceof ProductImagesUploadError) {
         if (savedProductId) {
@@ -1173,6 +1248,12 @@ export default function AdminPage() {
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
+  const selectedLogShipment = shipments.find(
+    (shipment) => shipment.id === logShipmentId,
+  );
+  const availableLogStatuses = selectedLogShipment
+    ? nextShipmentStatusOptions(selectedLogShipment.current_status)
+    : [];
   const filteredOrders = orders.filter((item) =>
     `${item.order_number} ${item.order_items?.map((orderItem) => orderItem.product_title).join(" ") || ""} ${item.profiles?.full_name || ""}`
       .toLowerCase()
@@ -1216,13 +1297,6 @@ export default function AdminPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/admin/variants"
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#174e70]"
-            >
-              <Package className="h-4 w-4" />
-              Kelola Varian
-            </Link>
             <button
               type="button"
               onClick={() => void loadData()}
@@ -1401,7 +1475,19 @@ export default function AdminPage() {
                     <Select
                       ariaLabel="Pilih resi"
                       value={logShipmentId}
-                      onChange={setLogShipmentId}
+                      onChange={(shipmentId) => {
+                        const shipment = shipments.find(
+                          (item) => item.id === shipmentId,
+                        );
+                        setLogShipmentId(shipmentId);
+                        setLogStatus(
+                          shipment
+                            ? (nextShipmentStatusOptions(
+                                shipment.current_status,
+                              )[0]?.value ?? "")
+                            : "",
+                        );
+                      }}
                     >
                       <option value="">Pilih nomor resi</option>
                       {shipments.map((shipment) => (
@@ -1417,11 +1503,21 @@ export default function AdminPage() {
                       ariaLabel="Pilih status log"
                       value={logStatus}
                       onChange={(value) =>
-                        setLogStatus(value as ShipmentStatus)
+                        setLogStatus(value as ShipmentStatus | "")
                       }
+                      disabled={!availableLogStatuses.length}
                     >
-                      {shipmentStatuses.map((status) => (
-                        <option key={status}>{statusLabel(status)}</option>
+                      {!availableLogStatuses.length && (
+                        <option value="">
+                          {selectedLogShipment
+                            ? "Tidak ada status lanjutan"
+                            : "Pilih resi terlebih dahulu"}
+                        </option>
+                      )}
+                      {availableLogStatuses.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
                       ))}
                     </Select>
                   </label>
@@ -1449,7 +1545,7 @@ export default function AdminPage() {
                     />
                   </label>
                   <button
-                    disabled={isSaving || !logShipmentId}
+                    disabled={isSaving || !logShipmentId || !logStatus}
                     className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-extrabold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ClipboardList className="h-4 w-4" /> Simpan log
@@ -1499,6 +1595,11 @@ export default function AdminPage() {
                           <Select
                             ariaLabel={`Status ${shipment.tracking_number}`}
                             value={shipment.current_status}
+                            disabled={
+                              !nextShipmentStatusOptions(
+                                shipment.current_status,
+                              ).length
+                            }
                             onChange={(value) =>
                               void updateShipmentStatus(
                                 shipment.id,
@@ -1506,9 +1607,16 @@ export default function AdminPage() {
                               )
                             }
                           >
-                            {shipmentStatuses.map((status) => (
-                              <option key={status} value={status}>
-                                {statusLabel(status)}
+                            <option value={shipment.current_status} disabled>
+                              {SHIPMENT_STATUS_OPTIONS.find(
+                                ({ value }) => value === shipment.current_status,
+                              )?.label ?? shipment.current_status}
+                            </option>
+                            {nextShipmentStatusOptions(
+                              shipment.current_status,
+                            ).map(({ value, label }) => (
+                              <option key={value} value={value}>
+                                {label}
                               </option>
                             ))}
                           </Select>
@@ -1800,6 +1908,71 @@ export default function AdminPage() {
                     />
                     Tampilkan di Katalog
                   </label>
+                  <section className="rounded-lg border border-slate-200 bg-[#f8fbfd] p-4 md:col-span-2 lg:col-span-4">
+                    <label className="flex items-start gap-3 text-sm font-bold text-[#0F3854]">
+                      <input
+                        type="checkbox"
+                        checked={hasProductVariants}
+                        onChange={(event) =>
+                          setHasProductVariants(event.target.checked)
+                        }
+                        disabled={
+                          isSaving ||
+                          !isCatalog ||
+                          isLoadingProductVariantConfig ||
+                          productVariantConfigError ||
+                          (editingProductId !== null &&
+                            hasConfiguredOptionGroups &&
+                            hasProductVariants)
+                        }
+                        className="mt-0.5 h-4 w-4 accent-[#0F3854]"
+                      />
+                      <span>
+                        Produk memiliki variasi
+                        <span className="mt-1 block font-normal text-slate-600">
+                          Aktifkan untuk mengatur atribut, nilai opsi, dan varian yang benar-benar dijual. Produk tanpa variasi tetap memakai varian default.
+                        </span>
+                      </span>
+                    </label>
+                    {isLoadingProductVariantConfig && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Memeriksa konfigurasi variasi...
+                      </p>
+                    )}
+                    {productVariantConfigError && (
+                      <p role="alert" className="mt-2 text-xs font-semibold text-red-700">
+                        Konfigurasi belum dapat diperiksa. Muat ulang halaman sebelum mengubah produk.
+                      </p>
+                    )}
+                    {editingProductId && hasProductVariants && (
+                      <Link
+                        href={`/admin/variants?productId=${encodeURIComponent(
+                          editingProductId,
+                        )}&returnTo=edit`}
+                        className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#174e70]"
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Kelola atribut dan varian
+                      </Link>
+                    )}
+                    {hasProductVariants && !editingProductId && (
+                      <p className="mt-2 text-xs font-semibold text-[#0F3854]">
+                        Simpan produk terlebih dahulu. Setelah itu, tombol pengelolaan atribut dan varian akan tersedia.
+                      </p>
+                    )}
+                    {hasProductVariants && !hasConfiguredOptionGroups && (
+                      <p className="mt-2 text-xs font-semibold text-amber-800">
+                        Produk disimpan nonaktif sampai atribut dan varian siap, agar varian default tidak terbeli tanpa pilihan.
+                      </p>
+                    )}
+                    {editingProductId &&
+                      hasConfiguredOptionGroups &&
+                      hasProductVariants && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Opsi produk ini sudah digunakan oleh varian. Untuk menjaga keranjang dan riwayat pesanan, matikan penjualan varian dengan mengubah status masing-masing varian menjadi nonaktif.
+                        </p>
+                      )}
+                  </section>
                   <label className="flex items-center gap-2 self-end pb-2 text-sm font-bold text-[#0F3854]">
                     <input
                       type="checkbox"
@@ -1812,7 +1985,7 @@ export default function AdminPage() {
                     />
                     Featured
                   </label>
-                  <div className="flex items-end gap-2">
+                  <div className="flex flex-wrap items-end gap-2 md:col-span-2 lg:col-span-4">
                     <button
                       disabled={isSaving}
                       className="inline-flex items-center gap-2 rounded-lg bg-[#E5B869] px-4 py-2.5 text-sm font-extrabold text-[#0F3854] transition hover:bg-[#d9a852] disabled:opacity-50"

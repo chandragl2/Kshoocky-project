@@ -8,6 +8,7 @@ import {
   Truck,
   WalletCards,
 } from "lucide-react";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
 type PanelVariant =
@@ -26,7 +27,7 @@ const panelCopy: Record<PanelVariant, { title: string; subtitle: string }> = {
   },
   shipments: {
     title: "My Shipments",
-    subtitle: "Pantau paket yang sedang dikirim ke Indonesia.",
+    subtitle: "Lihat resi dan riwayat pada detail pesanan katalog.",
   },
   billing: {
     title: "Invoices",
@@ -180,7 +181,29 @@ export default function UserWorkspacePanel({
     );
   }
 
-  const isShipment = variant === "shipments";
+  if (variant === "shipments") {
+    return (
+      <PageFrame title={copy.title} subtitle={copy.subtitle}>
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center">
+          <Truck className="mx-auto h-10 w-10 text-[#3c8aba]" />
+          <h2 className="mt-4 text-lg font-extrabold text-[#172036]">
+            Informasi resi pesanan
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+            Nomor resi dan riwayat perjalanan yang tersedia dapat dilihat pada
+            detail pesanan katalog Anda.
+          </p>
+          <Link
+            href="/user/orders"
+            className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-[#3c8aba] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#327ba8]"
+          >
+            Lihat pesanan saya
+          </Link>
+        </div>
+      </PageFrame>
+    );
+  }
+
   const isManifest = variant === "manifest";
   const isCatalog = variant === "catalog";
   return (
@@ -188,13 +211,11 @@ export default function UserWorkspacePanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs
           items={
-            isShipment
-              ? ["Active (0)", "Delivered (0)"]
-              : isManifest
-                ? ["Upcoming (0)", "Completed (0)"]
-                : isCatalog
-                  ? ["All Catalog Orders (0)", "Pending (0)"]
-                  : ["Proxy Online (0)", "Proxy Offline (0)", "Forwarding (0)"]
+            isManifest
+              ? ["Upcoming (0)", "Completed (0)"]
+              : isCatalog
+                ? ["All Catalog Orders (0)", "Pending (0)"]
+                : ["Proxy Online (0)", "Proxy Offline (0)", "Forwarding (0)"]
           }
         />
         <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-400">
@@ -202,11 +223,7 @@ export default function UserWorkspacePanel({
           <input
             className="w-full bg-transparent outline-none placeholder:text-slate-400"
             placeholder={
-              isShipment
-                ? "Search tracking..."
-                : isManifest
-                  ? "Search manifest..."
-                  : "Search order..."
+              isManifest ? "Search manifest..." : "Search order..."
             }
           />
         </label>
@@ -214,31 +231,21 @@ export default function UserWorkspacePanel({
       <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <EmptyState
           icon={
-            isShipment
-              ? Truck
-              : isManifest
-                ? FileText
-                : isCatalog
-                  ? Box
-                  : Archive
+            isManifest ? FileText : isCatalog ? Box : Archive
           }
           title={
-            isShipment
-              ? "No shipments yet"
-              : isManifest
-                ? "No manifest schedule"
-                : isCatalog
-                  ? "No catalog orders yet"
-                  : "No orders yet"
+            isManifest
+              ? "No manifest schedule"
+              : isCatalog
+                ? "No catalog orders yet"
+                : "No orders yet"
           }
           description={
-            isShipment
-              ? "Paket aktif kamu akan muncul di sini."
-              : isManifest
-                ? "Jadwal manifest akan muncul saat tersedia."
-                : isCatalog
-                  ? "Pesanan dari katalog akan muncul di sini."
-                  : "Pesanan kamu akan muncul di sini."
+            isManifest
+              ? "Jadwal manifest akan muncul saat tersedia."
+              : isCatalog
+                ? "Pesanan dari katalog akan muncul di sini."
+                : "Pesanan kamu akan muncul di sini."
           }
         />
       </div>

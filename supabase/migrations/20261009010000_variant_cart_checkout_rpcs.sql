@@ -1052,11 +1052,7 @@ REVOKE ALL ON FUNCTION public.cart_add_variant(uuid, uuid, integer) FROM PUBLIC,
 REVOKE ALL ON FUNCTION public.cart_update_item_quantity(uuid, integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.cart_remove_item(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.cart_clear_items() FROM PUBLIC, anon;
--- Disable the legacy checkout RPC after the variant-aware checkout is deployed.
--- Otherwise authenticated users could keep creating orders through the old
--- function, which validates but does not decrement inventory.
-REVOKE ALL ON FUNCTION public.checkout_catalog(uuid) FROM PUBLIC, anon, authenticated, service_role;
-
+-- Keep the legacy checkout RPC available during the variant checkout rollout.
 REVOKE ALL ON FUNCTION public.checkout_catalog_variant(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.admin_update_order_status(uuid, text) FROM PUBLIC, anon;
 

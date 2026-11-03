@@ -1,3 +1,6 @@
+import type { OrderStatus } from "../order-status";
+import type { ShipmentStatus } from "../shipment-status";
+
 export type Json =
   | string
   | number
@@ -252,6 +255,7 @@ export interface Database {
           stock: number;
           status: ProductVariantStatus;
           image_url: string | null;
+          option_signature: string[] | null;
           created_at: string;
           updated_at: string;
         };
@@ -264,6 +268,7 @@ export interface Database {
           stock?: number;
           status?: ProductVariantStatus;
           image_url?: string | null;
+          option_signature?: string[] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -276,6 +281,7 @@ export interface Database {
           stock?: number;
           status?: ProductVariantStatus;
           image_url?: string | null;
+          option_signature?: string[] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -530,7 +536,7 @@ export interface Database {
           discount: number;
           total_price: number;
           payment_status: string;
-          order_status: string;
+          order_status: OrderStatus;
           shipping_address: Json;
           notes: string;
           created_at: string;
@@ -545,7 +551,7 @@ export interface Database {
           discount: number;
           total_price: number;
           payment_status: string;
-          order_status: string;
+          order_status: OrderStatus;
           shipping_address: Json;
           notes: string;
           created_at?: string;
@@ -560,7 +566,7 @@ export interface Database {
           discount?: number;
           total_price?: number;
           payment_status?: string;
-          order_status?: string;
+          order_status?: OrderStatus;
           shipping_address?: Json;
           notes?: string;
           created_at?: string;
@@ -785,7 +791,7 @@ export interface Database {
           id: string;
           order_id: string;
           tracking_number: string;
-          current_status: string;
+          current_status: ShipmentStatus;
           created_at: string;
           updated_at: string;
         };
@@ -793,7 +799,7 @@ export interface Database {
           id?: string;
           order_id: string;
           tracking_number: string;
-          current_status: string;
+          current_status: ShipmentStatus;
           created_at?: string;
           updated_at?: string;
         };
@@ -801,7 +807,7 @@ export interface Database {
           id?: string;
           order_id?: string;
           tracking_number?: string;
-          current_status?: string;
+          current_status?: ShipmentStatus;
           created_at?: string;
           updated_at?: string;
         };
@@ -968,7 +974,20 @@ export interface Database {
         Returns: string;
       };
       admin_update_order_status: {
-        Args: { p_order_id: string; p_order_status: string };
+        Args: { p_order_id: string; p_order_status: OrderStatus };
+        Returns: undefined;
+      };
+      admin_create_shipment: {
+        Args: { p_order_id: string; p_tracking_number: string };
+        Returns: string;
+      };
+      admin_record_shipment_update: {
+        Args: {
+          p_shipment_id: string;
+          p_status: ShipmentStatus;
+          p_location: string | null;
+          p_description: string;
+        };
         Returns: undefined;
       };
 
@@ -1023,6 +1042,23 @@ export interface Database {
       admin_create_product_option_value: {
         Args: {
           p_option_group_id: string;
+          p_value: string;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_update_product_option_group: {
+        Args: {
+          p_option_group_id: string;
+          p_name: string;
+          p_is_required: boolean;
+          p_sort_order: number;
+        };
+        Returns: string;
+      };
+      admin_update_product_option_value: {
+        Args: {
+          p_option_value_id: string;
           p_value: string;
           p_sort_order: number;
         };

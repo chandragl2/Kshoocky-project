@@ -70,6 +70,9 @@ export default function UserCartPage() {
 
       const cart = await findUserCart(supabase, user.id);
       if (!cart) {
+        console.warn(
+          "[Cart] No cart row is visible to the current session; check the carts SELECT policy and whether the RPC-created cart exists.",
+        );
         setCartId(null);
         setItems([]);
         return;
@@ -82,8 +85,17 @@ export default function UserCartPage() {
         )
         .eq("cart_id", cart.id)
         .order("created_at", { ascending: true });
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error("[Cart] cart_items read failed", {
+          code: itemsError.code,
+          message: itemsError.message,
+        });
+        throw itemsError;
+      }
 
+      console.info("[Cart] Visible cart item rows", {
+        count: data?.length ?? 0,
+      });
       setCartId(cart.id);
       setItems(data ?? []);
     } catch {

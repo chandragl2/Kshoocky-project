@@ -40,11 +40,11 @@ REVOKE INSERT, UPDATE, DELETE
   ON TABLE public.order_items
   FROM PUBLIC, anon, authenticated;
 
-REVOKE INSERT (id, order_id, product_id, product_title, quantity, unit_price, subtotal, created_at)
+REVOKE INSERT (id, order_id, product_id, product_title, quantity, unit_price, subtotal, created_at, variant_id, variant_sku_snapshot, variant_label_snapshot, variant_options_snapshot)
   ON TABLE public.order_items
   FROM PUBLIC, anon, authenticated;
 
-REVOKE UPDATE (id, order_id, product_id, product_title, quantity, unit_price, subtotal, created_at)
+REVOKE UPDATE (id, order_id, product_id, product_title, quantity, unit_price, subtotal, created_at, variant_id, variant_sku_snapshot, variant_label_snapshot, variant_options_snapshot)
   ON TABLE public.order_items
   FROM PUBLIC, anon, authenticated;
 
@@ -97,5 +97,14 @@ REVOKE INSERT (id, order_id, payment_method, payment_gateway, transaction_id, ga
 REVOKE UPDATE (id, order_id, payment_method, payment_gateway, transaction_id, gateway_transaction_id, payment_status, amount, paid_at, expired_at, failure_reason, created_at, updated_at)
   ON TABLE public.payments
   FROM PUBLIC, anon, authenticated;
+
+-- Keep the legacy checkout as the authenticated rollback path during variant
+-- testing. Its implementation validates auth.uid(), address ownership, and the
+-- cart owner; SECURITY DEFINER lets it keep working after direct table DML is
+-- revoked above.
+ALTER FUNCTION public.checkout_catalog(uuid) OWNER TO postgres;
+ALTER FUNCTION public.checkout_catalog(uuid) SECURITY DEFINER;
+REVOKE ALL ON FUNCTION public.checkout_catalog(uuid) FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.checkout_catalog(uuid) TO authenticated;
 
 COMMIT;

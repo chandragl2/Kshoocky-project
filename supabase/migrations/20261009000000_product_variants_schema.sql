@@ -222,6 +222,12 @@ CREATE POLICY product_option_groups_public_read
     )
   );
 
+CREATE POLICY product_option_groups_admin_read
+  ON public.product_option_groups
+  FOR SELECT
+  TO authenticated
+  USING (public.is_admin() IS TRUE);
+
 CREATE POLICY product_option_values_public_read
   ON public.product_option_values
   FOR SELECT
@@ -238,6 +244,12 @@ CREATE POLICY product_option_values_public_read
     )
   );
 
+CREATE POLICY product_option_values_admin_read
+  ON public.product_option_values
+  FOR SELECT
+  TO authenticated
+  USING (public.is_admin() IS TRUE);
+
 CREATE POLICY product_variants_public_read
   ON public.product_variants
   FOR SELECT
@@ -252,6 +264,12 @@ CREATE POLICY product_variants_public_read
         AND product.status = 'active'
     )
   );
+
+CREATE POLICY product_variants_admin_read
+  ON public.product_variants
+  FOR SELECT
+  TO authenticated
+  USING (public.is_admin() IS TRUE);
 
 CREATE POLICY product_variant_option_values_public_read
   ON public.product_variant_option_values
@@ -269,6 +287,12 @@ CREATE POLICY product_variant_option_values_public_read
         AND product.status = 'active'
     )
   );
+
+CREATE POLICY product_variant_option_values_admin_read
+  ON public.product_variant_option_values
+  FOR SELECT
+  TO authenticated
+  USING (public.is_admin() IS TRUE);
 
 -- No client policy or table grant is created for inventory_movements.
 -- Checkout/admin functions will write this ledger transactionally in later phases.
