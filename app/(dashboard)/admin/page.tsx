@@ -13,6 +13,7 @@ import {
   ImagePlus,
   Loader2,
   LockKeyhole,
+  Menu,
   Package,
   SlidersHorizontal,
   Plus,
@@ -281,6 +282,7 @@ export default function AdminPage() {
     isSupabaseConfigured ? createClient() : null,
   );
   const [activeTab, setActiveTab] = useState<Tab>("orders");
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [requestedEditProductId, setRequestedEditProductId] = useState<
     string | null
   >(null);
@@ -1271,6 +1273,8 @@ export default function AdminPage() {
     editingProductImages.length +
     (legacyEditingImage ? 1 : 0) +
     selectedProductFiles.length;
+  const activeTabLabel =
+    tabs.find(({ id }) => id === activeTab)?.label ?? "Menu admin";
 
   function mainProductImage(product: Product) {
     const images = productImagesFor(product.id);
@@ -1283,61 +1287,93 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] px-4 py-8 text-slate-700 sm:px-8 lg:px-10 lg:py-10">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-          <div>
-            <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.2em] text-[#E5B869]">
-              KSHOOCKY OPERATIONS
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 lg:flex-row lg:items-start">
+        <aside className="w-full shrink-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-8 lg:w-64">
+          <div className="mb-4 hidden px-3 pt-2 lg:block">
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#E5B869]">
+              KSHOOCKY
             </p>
-            <h1 className="text-3xl font-extrabold tracking-tight text-[#0F3854] sm:text-4xl">
-              Admin Control Room
-            </h1>
-            <p className="mt-2 max-w-xl text-sm text-slate-500">
-              Kelola katalog PO dan verifikasi pembayaran dari satu ruang kerja.
+            <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-400">
+              Admin menu
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void loadData()}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-[#0F3854] shadow-sm transition hover:border-[#E5B869]"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-              />{" "}
-              Segarkan data
-            </button>
-          </div>
-        </header>
-
-        {(error || notice) && (
-          <div
-            className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}
+          <button
+            type="button"
+            aria-controls="admin-feature-nav"
+            aria-expanded={isMobileNavOpen}
+            onClick={() => setIsMobileNavOpen((isOpen) => !isOpen)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-extrabold text-[#0F3854] transition hover:bg-slate-50 lg:hidden"
           >
-            {error ? (
-              <AlertCircle className="h-5 w-5 shrink-0" />
+            {isMobileNavOpen ? (
+              <X className="h-5 w-5 shrink-0" />
             ) : (
-              <Check className="h-5 w-5 shrink-0" />
+              <Menu className="h-5 w-5 shrink-0" />
             )}
-            <span>{error || notice}</span>
-          </div>
-        )}
+            <span className="flex-1 text-left">Navigasi admin</span>
+            <span className="max-w-[45%] truncate text-xs font-semibold text-slate-500">
+              {activeTabLabel}
+            </span>
+          </button>
+          <nav
+            id="admin-feature-nav"
+            className={`mt-3 space-y-1 lg:mt-0 ${isMobileNavOpen ? "block" : "hidden lg:block"}`}
+            aria-label="Admin features"
+          >
+            {tabs.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(id);
+                  setIsMobileNavOpen(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-extrabold transition ${activeTab === id ? "bg-[#0F3854] text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-[#0F3854]"}`}
+              >
+                <Icon className="h-4 w-4 shrink-0" /> {label}
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-        <nav
-          className="mb-8 grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 xl:grid-cols-3"
-          aria-label="Admin features"
-        >
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActiveTab(id)}
-              className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold transition ${activeTab === id ? "bg-[#0F3854] text-white shadow-md" : "text-slate-500 hover:bg-slate-50 hover:text-[#0F3854]"}`}
+        <main className="min-w-0 flex-1">
+          <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+            <div>
+              <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.2em] text-[#E5B869]">
+                KSHOOCKY OPERATIONS
+              </p>
+              <h1 className="text-3xl font-extrabold tracking-tight text-[#0F3854] sm:text-4xl">
+                Admin Control Room
+              </h1>
+              <p className="mt-2 max-w-xl text-sm text-slate-500">
+                Kelola katalog PO dan verifikasi pembayaran dari satu ruang kerja.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadData()}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-[#0F3854] shadow-sm transition hover:border-[#E5B869]"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+                />{" "}
+                Segarkan data
+              </button>
+            </div>
+          </header>
+
+          {(error || notice) && (
+            <div
+              className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}
             >
-              <Icon className="h-4 w-4" /> {label}
-            </button>
-          ))}
-        </nav>
+              {error ? (
+                <AlertCircle className="h-5 w-5 shrink-0" />
+              ) : (
+                <Check className="h-5 w-5 shrink-0" />
+              )}
+              <span>{error || notice}</span>
+            </div>
+          )}
 
         {activeTab === "settings" && (
           <div className="space-y-6">
@@ -2195,6 +2231,7 @@ export default function AdminPage() {
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat data
           </div>
         )}
+        </main>
       </div>
     </div>
   );
