@@ -2,16 +2,187 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Menu, Search, ShoppingBag, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import {
+  ChevronDown,
+  LogOut,
+  Menu,
+  Search,
+  ShoppingBag,
+  UserRound,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useCartQuantity } from "@/hooks/useCartQuantity";
+import {
+  createClient,
+  isSupabaseConfigured,
+} from "@/lib/supabase/client";
+import type { ProfileRole } from "@/lib/supabase/database";
+import { getNavbarAuthView } from "@/lib/navbar-auth";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState("");
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [profileRole, setProfileRole] = useState<ProfileRole | null>(null);
+  const [profileName, setProfileName] = useState("");
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const cartQuantity = useCartQuantity();
+  const authView = getNavbarAuthView(
+    isAuthReady,
+    userId,
+    profileUserId,
+    profileRole,
+  );
+  const accountName =
+    (profileUserId === userId ? profileName : "") || userEmail || "Akun saya";
 
   function closeMenu() {
     setIsMenuOpen(false);
+  }
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !accountMenuRef.current?.contains(event.target)
+      ) {
+        setIsAccountMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsAccountMenuOpen(false);
+        accountMenuButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAccountMenuOpen]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setIsAuthReady(true);
+      return;
+    }
+
+    const supabase = createClient();
+    let isMounted = true;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+
+      setUserId(session?.user.id ?? null);
+      setUserEmail(session?.user.email ?? "");
+      setIsAuthReady(true);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthReady || !userId || !isSupabaseConfigured) {
+      setProfileUserId(null);
+      setProfileRole(null);
+      setProfileName("");
+      setIsProfileLoading(false);
+      setProfileError("");
+      return;
+    }
+
+    const supabase = createClient();
+    let isCurrent = true;
+    setProfileUserId(null);
+    setProfileRole(null);
+    setProfileName("");
+    setIsProfileLoading(true);
+    setProfileError("");
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("full_name, role")
+          .eq("id", userId)
+          .maybeSingle();
+        if (!isCurrent) return;
+
+        if (error) {
+          console.error("Navbar: gagal memverifikasi profil akun.", error);
+          setProfileError("Profil akun gagal diverifikasi.");
+          return;
+        }
+
+        if (!data) {
+          setProfileError("Profil akun tidak ditemukan.");
+          return;
+        }
+
+        setProfileUserId(userId);
+        setProfileName(data.full_name?.trim() ?? "");
+        setProfileRole(data.role);
+      } catch (error) {
+        if (!isCurrent) return;
+        console.error("Navbar: gagal memuat profil akun.", error);
+        setProfileError("Profil akun gagal dimuat.");
+      } finally {
+        if (isCurrent) setIsProfileLoading(false);
+      }
+    })();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isAuthReady, userId]);
+
+  async function handleLogout() {
+    if (!isSupabaseConfigured) return;
+
+    setIsLoggingOut(true);
+    setProfileError("");
+
+    try {
+      const { error } = await createClient().auth.signOut();
+      if (error) {
+        console.error("Navbar: gagal mengakhiri sesi akun.", error);
+        setProfileError("Gagal keluar. Silakan coba lagi.");
+        return;
+      }
+
+      setIsAccountMenuOpen(false);
+      closeMenu();
+    } catch (error) {
+      console.error("Navbar: gagal mengakhiri sesi akun.", error);
+      setProfileError("Gagal keluar. Silakan coba lagi.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
+  function closeAccountMenu() {
+    setIsAccountMenuOpen(false);
+    closeMenu();
   }
 
   return (
@@ -78,24 +249,121 @@ export default function Navbar() {
                 </span>
               )}
             </Link>
-            <button
-              aria-label="Akun saya"
-              className="hover:text-[#2563eb] transition-colors"
-            >
-              <UserRound className="h-5 w-5" />
-            </button>
-            <Link
-              href="/login"
-              className="text-[13px] font-semibold text-[#332d2a] hover:text-[#2563eb] transition-colors"
-            >
-              Masuk
-            </Link>
-            <Link
-              href="/register"
-              className="bg-[#0F3854] hover:bg-[#2563eb] text-white font-semibold py-2.5 px-5 rounded-full text-[13px] transition-colors shadow-sm"
-            >
-              Daftar Sekarang <span aria-hidden="true">→</span>
-            </Link>
+            {authView === "loading" ? (
+              <span aria-hidden="true" className="h-5 w-5" />
+            ) : authView === "anonymous" ? (
+              <>
+                <Link
+                  href="/login"
+                  aria-label="Masuk ke akun"
+                  className="hover:text-[#2563eb] transition-colors"
+                >
+                  <UserRound className="h-5 w-5" />
+                </Link>
+                <Link
+                  href="/login"
+                  className="text-[13px] font-semibold text-[#332d2a] hover:text-[#2563eb] transition-colors"
+                >
+                  Masuk
+                </Link>
+                <Link
+                  href="/register"
+                  className="bg-[#0F3854] hover:bg-[#2563eb] text-white font-semibold py-2.5 px-5 rounded-full text-[13px] transition-colors shadow-sm"
+                >
+                  Daftar Sekarang <span aria-hidden="true">→</span>
+                </Link>
+              </>
+            ) : (
+              <div ref={accountMenuRef} className="relative">
+                <button
+                  ref={accountMenuButtonRef}
+                  type="button"
+                  aria-label={`Menu akun ${accountName}`}
+                  aria-expanded={isAccountMenuOpen}
+                  onClick={() => setIsAccountMenuOpen(!isAccountMenuOpen)}
+                  className="flex items-center gap-2 hover:text-[#2563eb] transition-colors"
+                >
+                  <UserRound className="h-5 w-5 shrink-0" />
+                  <span className="hidden max-w-36 truncate text-[13px] font-semibold xl:inline">
+                    {profileName || (authView === "admin" ? "Admin" : accountName)}
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                {isAccountMenuOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-3 w-56 rounded-xl border border-[#eee9e4] bg-white p-2 text-sm shadow-lg">
+                    <div className="border-b border-[#eee9e4] px-3 py-2">
+                      <p className="truncate font-semibold text-[#332d2a]">
+                        {accountName}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {authView === "admin"
+                          ? "Administrator"
+                          : authView === "customer"
+                            ? "Customer"
+                            : isProfileLoading
+                              ? "Memeriksa akun..."
+                              : profileError || "Role akun belum terverifikasi."}
+                      </p>
+                    </div>
+                    {profileError && authView !== "unverified" && (
+                      <p role="alert" className="px-3 py-2 text-xs text-red-700">
+                        {profileError}
+                      </p>
+                    )}
+                    {authView === "admin" && (
+                      <Link
+                        href="/admin"
+                        onClick={closeAccountMenu}
+                        className="block rounded-lg px-3 py-2.5 font-semibold text-[#332d2a] hover:bg-[#f5eee5]"
+                      >
+                        Dashboard Admin
+                      </Link>
+                    )}
+                    {authView === "customer" && (
+                      <>
+                        <Link
+                          href="/user/profile"
+                          onClick={closeAccountMenu}
+                          className="block rounded-lg px-3 py-2.5 font-semibold text-[#332d2a] hover:bg-[#f5eee5]"
+                        >
+                          Profil Saya
+                        </Link>
+                        <Link
+                          href="/user"
+                          onClick={closeAccountMenu}
+                          className="block rounded-lg px-3 py-2.5 font-semibold text-[#332d2a] hover:bg-[#f5eee5]"
+                        >
+                          Dashboard Customer
+                        </Link>
+                        <Link
+                          href="/user/orders"
+                          onClick={closeAccountMenu}
+                          className="block rounded-lg px-3 py-2.5 font-semibold text-[#332d2a] hover:bg-[#f5eee5]"
+                        >
+                          Pesanan Saya
+                        </Link>
+                        <Link
+                          href="/user/addresses"
+                          onClick={closeAccountMenu}
+                          className="block rounded-lg px-3 py-2.5 font-semibold text-[#332d2a] hover:bg-[#f5eee5]"
+                        >
+                          Alamat
+                        </Link>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleLogout()}
+                      disabled={isLoggingOut}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {isLoggingOut ? "Keluar..." : "Keluar"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -153,22 +421,98 @@ export default function Navbar() {
               Tentang Kami
             </Link>
           </div>
-          <div className="mt-3 flex gap-3 border-t border-[#eee9e4] pt-4">
-            <Link
-              href="/login"
-              onClick={closeMenu}
-              className="flex-1 rounded-xl border border-[#dfe3e8] px-4 py-3 text-center text-sm font-bold text-[#332d2a]"
-            >
-              Masuk
-            </Link>
-            <Link
-              href="/register"
-              onClick={closeMenu}
-              className="flex-1 rounded-xl bg-[#0F3854] px-4 py-3 text-center text-sm font-bold text-white"
-            >
-              Daftar Sekarang
-            </Link>
-          </div>
+          {authView === "anonymous" && (
+            <div className="mt-3 flex gap-3 border-t border-[#eee9e4] pt-4">
+              <Link
+                href="/login"
+                onClick={closeMenu}
+                className="flex-1 rounded-xl border border-[#dfe3e8] px-4 py-3 text-center text-sm font-bold text-[#332d2a]"
+              >
+                Masuk
+              </Link>
+              <Link
+                href="/register"
+                onClick={closeMenu}
+                className="flex-1 rounded-xl bg-[#0F3854] px-4 py-3 text-center text-sm font-bold text-white"
+              >
+                Daftar Sekarang
+              </Link>
+            </div>
+          )}
+          {(authView === "customer" ||
+            authView === "admin" ||
+            authView === "unverified") && (
+            <div className="mt-3 border-t border-[#eee9e4] pt-3">
+              <p className="px-3 py-2 text-sm font-bold text-[#332d2a]">
+                {accountName}
+              </p>
+              {authView === "customer" && (
+                <>
+                  <Link
+                    href="/user/profile"
+                    onClick={closeMenu}
+                    className="block rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+                  >
+                    Profil Saya
+                  </Link>
+                  <Link
+                    href="/user"
+                    onClick={closeMenu}
+                    className="block rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+                  >
+                    Dashboard Customer
+                  </Link>
+                  <Link
+                    href="/user/orders"
+                    onClick={closeMenu}
+                    className="block rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+                  >
+                    Pesanan Saya
+                  </Link>
+                  <Link
+                    href="/user/addresses"
+                    onClick={closeMenu}
+                    className="block rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+                  >
+                    Alamat
+                  </Link>
+                </>
+              )}
+              {authView === "admin" && (
+                <Link
+                  href="/admin"
+                  onClick={closeMenu}
+                  className="block rounded-lg px-3 py-3 hover:bg-[#f5eee5]"
+                >
+                  Dashboard Admin
+                </Link>
+              )}
+              {authView === "unverified" && (
+                <p
+                  role={profileError ? "alert" : undefined}
+                  className="px-3 py-2 text-xs text-slate-500"
+                >
+                  {isProfileLoading
+                    ? "Memeriksa akun..."
+                    : profileError || "Role akun belum terverifikasi."}
+                </p>
+              )}
+              {profileError && authView !== "unverified" && (
+                <p role="alert" className="px-3 py-2 text-xs text-red-700">
+                  {profileError}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                disabled={isLoggingOut}
+                className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4" />
+                {isLoggingOut ? "Keluar..." : "Keluar"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </nav>
