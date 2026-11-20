@@ -1138,6 +1138,34 @@ export interface Database {
         Args: { p_address_id: string };
         Returns: string;
       };
+      doku_list_reconciliation_candidates: {
+        Args: { p_limit: number };
+        Returns: {
+          payment_id: string;
+          invoice_number: string;
+          original_request_id: string;
+          payment_expires_at: string;
+        }[];
+      };
+      doku_recover_creating_payment_attempts: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      doku_defer_payment_reconciliation: {
+        Args: { p_payment_id: string; p_error_code: string };
+        Returns: undefined;
+      };
+      doku_record_reconciliation: {
+        Args: {
+          p_payment_id: string;
+          p_status: string;
+          p_invoice_number: string;
+          p_amount: number;
+          p_original_request_id: string;
+          p_gateway_transaction_id: string | null;
+        };
+        Returns: string;
+      };
       checkout_catalog: {
         Args: { p_address_id: string };
         Returns: string;
