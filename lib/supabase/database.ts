@@ -1155,6 +1155,19 @@ export interface Database {
         Args: { p_payment_id: string; p_error_code: string };
         Returns: undefined;
       };
+      doku_record_notification: {
+        Args: {
+          p_event_id: string;
+          p_body_digest: string;
+          p_invoice_number: string;
+          p_amount: number;
+          p_original_request_id: string | null;
+          p_gateway_transaction_id: string | null;
+          p_status: string;
+          p_event_time: string | null;
+        };
+        Returns: string;
+      };
       doku_record_reconciliation: {
         Args: {
           p_payment_id: string;
