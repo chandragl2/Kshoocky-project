@@ -1,15 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import type { DokuCheckoutStatus } from "./check-status.ts";
 import type { DokuConfig } from "./config.ts";
+import type { Database } from "../supabase/database.ts";
 
 export const dokuReconciliationBatchLimit = 1;
-
-export type DokuReconciliationCandidate = {
-  payment_id: string;
-  invoice_number: string;
-  original_request_id: string;
-  payment_expires_at: string;
-};
+export type DokuReconciliationCandidate =
+  Database["public"]["Functions"]["doku_list_reconciliation_candidates"]["Returns"][number];
+type DokuReconciliationIncidentArgs =
+  Database["public"]["Functions"]["doku_record_reconciliation_incident"]["Args"];
 
 export type DokuReconciliationRecord = {
   p_payment_id: string;
@@ -29,6 +27,9 @@ export type DokuReconciliationClient = {
     error: unknown | null;
   }>;
   record(args: DokuReconciliationRecord): Promise<{ error: unknown | null }>;
+  recordIncident(
+    args: DokuReconciliationIncidentArgs,
+  ): Promise<{ data: string | null; error: unknown | null }>;
   defer(args: {
     p_payment_id: string;
     p_error_code: string;
@@ -45,6 +46,8 @@ export type DokuReconciliationDependencies = {
 };
 
 const checkoutExpiryGraceMs = 60 * 1000;
+const incidentIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isAuthorized(request: Request) {
   const expected = process.env.CRON_SECRET;
@@ -95,10 +98,10 @@ export async function handleDokuReconcile(
     );
   }
 
-  let candidates: DokuReconciliationCandidate[] | null;
+  let candidates: DokuReconciliationCandidate[];
   try {
     const result = await client.list(dokuReconciliationBatchLimit);
-    if (result.error) {
+    if (result.error || !Array.isArray(result.data)) {
       return Response.json(
         { error: "DOKU reconciliation candidates could not be loaded." },
         { status: 503 },
@@ -116,11 +119,23 @@ export async function handleDokuReconcile(
   let deferred = 0;
   let skipped = 0;
   let failures = 0;
+  let incidentRecorded: boolean | undefined;
 
-  for (const candidate of (candidates ?? []).slice(
-    0,
-    dokuReconciliationBatchLimit,
-  )) {
+  for (const candidate of candidates.slice(0, dokuReconciliationBatchLimit)) {
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      !Object.prototype.hasOwnProperty.call(
+        candidate,
+        "gateway_transaction_id",
+      ) ||
+      (candidate.gateway_transaction_id !== null &&
+        typeof candidate.gateway_transaction_id !== "string")
+    ) {
+      failures += 1;
+      continue;
+    }
+
     const expiresAt = Date.parse(candidate.payment_expires_at);
     if (
       !Number.isFinite(expiresAt) ||
@@ -143,7 +158,11 @@ export async function handleDokuReconcile(
         throw new Error("DOKU reconciliation reference mismatch.");
       }
 
-      let transactionStatus: string;
+      let transactionStatus:
+        | "SUCCESS"
+        | "EXPIRED"
+        | "PENDING"
+        | "FAILED";
       if (status.transactionStatus === "SUCCESS") {
         transactionStatus = "SUCCESS";
       } else if (
@@ -167,9 +186,63 @@ export async function handleDokuReconcile(
         p_invoice_number: status.invoiceNumber,
         p_amount: status.amount,
         p_original_request_id: status.originalRequestId,
-        p_gateway_transaction_id: null,
+        p_gateway_transaction_id: status.gatewayTransactionId,
       });
-      if (updateError) throw new Error("DOKU reconciliation update failed.");
+      if (updateError) {
+        const updateMessage =
+          typeof updateError === "object" &&
+          updateError !== null &&
+          "message" in updateError &&
+          typeof updateError.message === "string"
+            ? updateError.message
+            : "";
+        if (
+          updateMessage.includes("doku_reconciliation_transaction_mismatch") ||
+          updateMessage.includes("doku_reconciliation_reference_mismatch")
+        ) {
+          const reasonCode = updateMessage.includes("transaction_mismatch")
+            ? "transaction_id_mismatch"
+            : "reference_mismatch";
+          try {
+            const { data: incidentId, error: incidentError } =
+              await client.recordIncident({
+                p_source: "reconciliation",
+                p_event_id: null,
+                p_body_digest: null,
+                p_payment_id: candidate.payment_id,
+                p_order_id: null,
+                p_invoice_number: status.invoiceNumber,
+                p_amount: status.amount,
+                p_original_request_id: status.originalRequestId,
+                p_gateway_transaction_id: status.gatewayTransactionId,
+                p_existing_gateway_transaction_id:
+                  candidate.gateway_transaction_id,
+                p_gateway_status: transactionStatus,
+                p_gateway_transaction_status: transactionStatus,
+                p_local_payment_status: null,
+                p_local_order_payment_status: null,
+                p_local_order_status: null,
+                p_local_payment_session_state: null,
+                p_reason_code: reasonCode,
+              });
+            incidentRecorded =
+              incidentError === null &&
+              typeof incidentId === "string" &&
+              incidentIdPattern.test(incidentId);
+            if (!incidentRecorded) {
+              failures += 1;
+              continue;
+            }
+          } catch {
+            incidentRecorded = false;
+            failures += 1;
+            continue;
+          }
+          failures += 1;
+          continue;
+        }
+        throw new Error("DOKU reconciliation update failed.");
+      }
       processed += 1;
     } catch {
       try {
@@ -186,7 +259,20 @@ export async function handleDokuReconcile(
   }
 
   return Response.json(
-    { processed, deferred, skipped, failures },
+    {
+      processed,
+      deferred,
+      skipped,
+      failures,
+      ...(incidentRecorded === undefined
+        ? {}
+        : {
+            incidentRecorded,
+            ...(incidentRecorded
+              ? {}
+              : { error: "incident_recording_failed" }),
+          }),
+    },
     { status: failures ? 503 : 200 },
   );
 }

@@ -1442,6 +1442,34 @@ test("doku_create_route_preserves_existing_uncertain_api_responses", () => {
   );
 });
 
+test("doku_create_route_logs_safe_categories_for_checkout_503_paths", () => {
+  const route = readFileSync(
+    new URL("../app/api/payments/doku/create/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(diagnosticModule, "expected DOKU diagnostic logging utilities");
+
+  for (const category of [
+    "configuration_missing",
+    "database_persistence_failed",
+    "local_request_validation",
+    "gateway_payload_validation",
+    "checkout_response_uncertain",
+  ]) {
+    assert.ok(
+      diagnosticModule.dokuCheckoutDiagnosticCategories.includes(category),
+      `expected allowlisted diagnostic category ${category}`,
+    );
+    assert.match(
+      route,
+      new RegExp(
+        `stage:\\s*"${category}",\\s*category:\\s*"${category}"`,
+      ),
+    );
+  }
+  assert.match(route, /reasonCode:\s*"payment_url_invalid"/);
+});
+
 test("payment_request_uses_only_the_persisted_order_amount_and_invoice", () => {
   assert.ok(paymentRequestModule, "expected DOKU payment request builder");
   const request = paymentRequestModule.buildDokuCheckoutRequest({
@@ -1540,10 +1568,96 @@ test("notification_verification_accepts_valid_signed_checkout_event", () => {
   assert.equal(result.invoiceNumber, "INV-123");
   assert.equal(result.amount, 125000);
   assert.equal(result.eventId, "notification-123");
+  assert.equal(
+    result.bodyDigest,
+    createHash("sha256").update(notificationBody, "utf8").digest("base64"),
+  );
+  assert.match(result.bodyDigest, /^[A-Za-z0-9+/]{43}=$/);
   assert.equal(result.originalRequestId, "checkout-request-123");
   assert.equal(result.status, "SUCCESS");
   assert.match(result.bodyDigest, /^[A-Za-z0-9+/]{43}=$/);
   assert.equal(result.eventTime, "2026-11-07T04:00:00.000Z");
+});
+
+test("notification_verification_preserves_optional_gateway_transaction_id", () => {
+  assert.ok(notificationModule, "expected DOKU notification verifier");
+  const rawBody = JSON.stringify({
+    transaction: {
+      status: "SUCCESS",
+      date: "2026-11-07T04:00:00Z",
+      original_request_id: "checkout-request-123",
+      id: "gateway-transaction-123",
+    },
+    order: { invoice_number: "INV-123", amount: 125000 },
+  });
+  const notification = signedNotification({ rawBody });
+  const result = notificationModule.verifyDokuNotification({
+    ...notification,
+    config: {
+      clientId: "MCH-test",
+      secretKey,
+    },
+    notificationUrl,
+  });
+
+  assert.equal(result.gatewayTransactionId, "gateway-transaction-123");
+});
+
+test("notification_verification_accepts_128_character_gateway_transaction_id", () => {
+  assert.ok(notificationModule, "expected DOKU notification verifier");
+  const gatewayTransactionId = "x".repeat(128);
+  const rawBody = JSON.stringify({
+    transaction: {
+      status: "SUCCESS",
+      date: "2026-11-07T04:00:00Z",
+      original_request_id: "checkout-request-123",
+      id: gatewayTransactionId,
+    },
+    order: { invoice_number: "INV-123", amount: 125000 },
+  });
+  const notification = signedNotification({ rawBody });
+  const result = notificationModule.verifyDokuNotification({
+    ...notification,
+    config: { clientId: "MCH-test", secretKey },
+    notificationUrl,
+  });
+
+  assert.equal(result.gatewayTransactionId, gatewayTransactionId);
+});
+
+test("notification_verification_rejects_invalid_gateway_transaction_ids", () => {
+  assert.ok(notificationModule, "expected DOKU notification verifier");
+  const config = { clientId: "MCH-test", secretKey };
+  for (const transactionOverrides of [
+    { id: "" },
+    { id: " \t\n" },
+    { id: 123 },
+    { id: "x".repeat(129) },
+    { transaction_id: false },
+    { id: 123, transaction_id: "gateway-transaction-123" },
+  ]) {
+    const rawBody = JSON.stringify({
+      transaction: {
+        status: "SUCCESS",
+        date: "2026-11-07T04:00:00Z",
+        original_request_id: "checkout-request-123",
+        ...transactionOverrides,
+      },
+      order: { invoice_number: "INV-123", amount: 125000 },
+    });
+    const notification = signedNotification({ rawBody });
+
+    assert.throws(
+      () =>
+        notificationModule.verifyDokuNotification({
+          ...notification,
+          config,
+          notificationUrl,
+        }),
+      /notification fields are invalid/i,
+      JSON.stringify(transactionOverrides),
+    );
+  }
 });
 
 test("notification_verification_rejects_wrong_client_and_mutated_body", () => {
@@ -1811,4 +1925,38 @@ test("doku_reconciliation_schedule_is_manual_supabase_cron_not_vercel_cron", () 
   assert.match(runbook, /\*\/15 \* \* \* \*/);
   assert.match(runbook, /manual/i);
   assert.match(runbook, /Vault|secret store/i);
+  assert.match(runbook, /processes at most 1 reconciliation candidate/i);
+});
+
+test("doku_notification_amount_mismatch_is_recorded_without_marking_paid", () => {
+  const route = readFileSync(
+    new URL("../app/api/payments/doku/notify/route.ts", import.meta.url),
+    "utf8",
+  );
+  const migration = readFileSync(
+    new URL(
+      "../supabase/migrations/20261123100000_doku_incident_observations.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(route, /processingMessage\.includes\("doku_notification_amount_mismatch"\)/);
+  assert.match(
+    route,
+    /p_reason_code:[\s\S]*?processingMessage\.includes\(\s*"doku_notification_amount_mismatch",?\s*\)[\s\S]*?\?\s*"amount_mismatch"/,
+  );
+  assert.match(
+    migration,
+    /IF v_payment\.order_id IS DISTINCT FROM v_order\.id\s+OR v_payment\.amount IS DISTINCT FROM p_amount\s+THEN\s+RAISE EXCEPTION USING ERRCODE = '22023',\s+MESSAGE = 'doku_notification_amount_mismatch';\s+END IF;/,
+  );
+  const mismatchGuard = migration.indexOf(
+    "MESSAGE = 'doku_notification_amount_mismatch'",
+  );
+  const paidTransition = migration.indexOf(
+    "SET payment_status = 'paid'",
+    mismatchGuard,
+  );
+  assert.ok(mismatchGuard >= 0);
+  assert.ok(paidTransition > mismatchGuard);
 });

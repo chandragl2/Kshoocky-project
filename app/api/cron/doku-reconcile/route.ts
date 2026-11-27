@@ -30,6 +30,13 @@ function createReconciliationClient(): DokuReconciliationClient {
       );
       return { error };
     },
+    async recordIncident(args) {
+      const { data, error } = await supabase.rpc(
+        "doku_record_reconciliation_incident",
+        args,
+      );
+      return { data, error };
+    },
     async defer(args) {
       const { error } = await supabase.rpc(
         "doku_defer_payment_reconciliation",

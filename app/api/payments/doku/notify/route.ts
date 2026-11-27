@@ -86,12 +86,67 @@ export async function POST(request: NextRequest) {
       p_invoice_number: notification.invoiceNumber,
       p_amount: notification.amount,
       p_original_request_id: notification.originalRequestId,
-      p_gateway_transaction_id: null,
+      p_gateway_transaction_id: notification.gatewayTransactionId,
       p_status: notification.status,
       p_event_time: notification.eventTime,
     },
   );
   if (processingError || !outcome) {
+    const processingMessage =
+      typeof processingError === "object" &&
+      processingError !== null &&
+      "message" in processingError &&
+      typeof processingError.message === "string"
+        ? processingError.message
+        : "";
+    if (
+      processingMessage.includes("doku_notification_amount_mismatch") ||
+      processingMessage.includes("doku_notification_transaction_mismatch") ||
+      processingMessage.includes("doku_notification_reference_mismatch") ||
+      processingMessage.includes("doku_notification_replay_conflict")
+    ) {
+      try {
+        const { data: incidentId, error: incidentError } =
+          await serviceSupabase.rpc("doku_record_reconciliation_incident", {
+            p_source: "notification",
+            p_event_id: notification.eventId,
+            p_body_digest: notification.bodyDigest,
+            p_payment_id: null,
+            p_order_id: null,
+            p_invoice_number: notification.invoiceNumber,
+            p_amount: notification.amount,
+            p_original_request_id: notification.originalRequestId,
+            p_gateway_transaction_id: notification.gatewayTransactionId,
+            p_existing_gateway_transaction_id: null,
+            p_gateway_status: notification.status,
+            p_gateway_transaction_status: notification.status,
+            p_local_payment_status: null,
+            p_local_order_payment_status: null,
+            p_local_order_status: null,
+            p_local_payment_session_state: null,
+            p_reason_code: processingMessage.includes(
+              "doku_notification_amount_mismatch",
+            )
+              ? "amount_mismatch"
+              : processingMessage.includes("transaction_mismatch")
+                ? "transaction_id_mismatch"
+                : processingMessage.includes("replay_conflict")
+                  ? "notification_replay_conflict"
+                  : "reference_mismatch",
+          });
+        if (incidentError || !incidentId) {
+          console.error(
+            "DOKU notification incident could not be recorded.",
+            incidentError,
+          );
+        }
+      } catch (incidentError) {
+        console.error(
+          "DOKU notification incident RPC failed.",
+          incidentError,
+        );
+      }
+    }
     return NextResponse.json(
       { error: "Notifikasi belum dapat dicatat. DOKU dapat mengirim ulang." },
       { status: 503 },

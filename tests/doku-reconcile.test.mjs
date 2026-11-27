@@ -97,6 +97,8 @@ function statusFetch({
   amount = 125000,
   transactionStatus = "SUCCESS",
   originalRequestId = "checkout-request-123",
+  gatewayTransactionId = null,
+  transactionIdAlias,
   responseRequestId,
   signatureOverride,
 } = {}) {
@@ -107,6 +109,10 @@ function statusFetch({
       transaction: {
         status: transactionStatus,
         original_request_id: originalRequestId,
+        id: gatewayTransactionId,
+        ...(transactionIdAlias !== undefined
+          ? { transaction_id: transactionIdAlias }
+          : {}),
       },
       order: { invoice_number: invoiceNumber, amount },
     });
@@ -152,6 +158,7 @@ function reconciliationCandidate(overrides = {}) {
     invoice_number: "INV-123",
     original_request_id: "checkout-request-123",
     payment_expires_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    gateway_transaction_id: null,
     ...overrides,
   };
 }
@@ -162,12 +169,18 @@ function reconciliationHarness({
   status = async (candidate) => ({
     invoiceNumber: candidate.invoiceNumber,
     amount: 125000,
+    gatewayTransactionId: null,
     originalRequestId: "checkout-request-123",
     transactionStatus: "SUCCESS",
     orderStatus: null,
   }),
   recordResult = { error: null },
   deferResult = { error: null },
+  incidentResult = {
+    data: "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+    error: null,
+  },
+  incidentThrows = null,
 } = {}) {
   const calls = [];
   const client = {
@@ -186,6 +199,11 @@ function reconciliationHarness({
     defer: async (args) => {
       calls.push({ rpc: "defer", args });
       return deferResult;
+    },
+    recordIncident: async (args) => {
+      calls.push({ rpc: "recordIncident", args });
+      if (incidentThrows) throw incidentThrows;
+      return incidentResult;
     },
   };
   const dependencies = {
@@ -325,7 +343,7 @@ test("missing_server_credentials_fail_closed_without_exposing_secret", () => {
 });
 
 test("doku_check_status_uses_signed_get_and_validates_response", async () => {
-  const request = statusFetch();
+  const request = statusFetch({ gatewayTransactionId: "gateway-transaction-123" });
   const result = await getStatus(request.fetchImpl);
 
   assert.equal(
@@ -339,6 +357,36 @@ test("doku_check_status_uses_signed_get_and_validates_response", async () => {
   assert.equal(result.amount, 125000);
   assert.equal(result.transactionStatus, "SUCCESS");
   assert.equal(result.originalRequestId, "checkout-request-123");
+  assert.equal(result.gatewayTransactionId, "gateway-transaction-123");
+});
+
+test("doku_check_status_rejects_invalid_gateway_transaction_ids", async () => {
+  for (const transaction of [
+    { gatewayTransactionId: "" },
+    { gatewayTransactionId: " \t\n" },
+    { gatewayTransactionId: 123 },
+    { gatewayTransactionId: "x".repeat(129) },
+    {
+      gatewayTransactionId: 123,
+      transactionIdAlias: "gateway-transaction-123",
+    },
+  ]) {
+    const request = statusFetch(transaction);
+    await assert.rejects(
+      getStatus(request.fetchImpl),
+      /transaction ID is invalid/i,
+      JSON.stringify(transaction),
+    );
+  }
+});
+
+test("doku_check_status_accepts_128_character_gateway_transaction_id", async () => {
+  const gatewayTransactionId = "x".repeat(128);
+  const request = statusFetch({ gatewayTransactionId });
+
+  const result = await getStatus(request.fetchImpl);
+
+  assert.equal(result.gatewayTransactionId, gatewayTransactionId);
 });
 
 test("doku_check_status_rejects_invalid_response_signature", async () => {
@@ -514,6 +562,23 @@ test("reconciliation_handler_returns_service_unavailable_on_rpc_errors", async (
   });
 });
 
+test("reconciliation_handler_rejects_missing_candidate_rpc_result", async () => {
+  const harness = reconciliationHarness({
+    candidateResult: { data: null, error: null },
+  });
+
+  await withCronSecret(cronSecret, async () => {
+    const response = await harness.handle(
+      cronRequest(`Bearer ${cronSecret}`),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "DOKU reconciliation candidates could not be loaded.",
+    });
+  });
+});
+
 test("reconciliation_handler_defers_a_failed_candidate_without_aborting_invocation", async () => {
   const harness = reconciliationHarness({
     status: async () => {
@@ -573,4 +638,343 @@ test("reconciliation_handler_defers_unknown_gateway_status_instead_of_recording_
     p_payment_id: "payment-123",
     p_error_code: "gateway_reconciliation_unavailable",
   });
+});
+
+test("reconciliation_handler_rejects_candidate_without_transaction_id_field", async () => {
+  const candidate = reconciliationCandidate();
+  delete candidate.gateway_transaction_id;
+  let statusCalls = 0;
+  const harness = reconciliationHarness({
+    candidateResult: { data: [candidate], error: null },
+    status: async () => {
+      statusCalls += 1;
+      return {
+        invoiceNumber: "INV-123",
+        amount: 125000,
+        gatewayTransactionId: null,
+        originalRequestId: "checkout-request-123",
+        transactionStatus: "SUCCESS",
+        orderStatus: null,
+      };
+    },
+  });
+
+  await withCronSecret(cronSecret, async () => {
+    const response = await harness.handle(
+      cronRequest(`Bearer ${cronSecret}`),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      processed: 0,
+      deferred: 0,
+      skipped: 0,
+      failures: 1,
+    });
+  });
+
+  assert.equal(statusCalls, 0);
+  assert.equal(harness.calls.some((call) => call.rpc === "record"), false);
+});
+
+test("reconciliation_handler_records_a_separate_mismatch_incident", async () => {
+  const harness = reconciliationHarness({
+    candidateResult: {
+      data: [
+        reconciliationCandidate({
+          gateway_transaction_id: "existing-transaction-id",
+        }),
+      ],
+      error: null,
+    },
+    recordResult: { error: { message: "doku_reconciliation_transaction_mismatch" } },
+  });
+
+  await withCronSecret(cronSecret, async () => {
+    const response = await harness.handle(
+      cronRequest(`Bearer ${cronSecret}`),
+    );
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      processed: 0,
+      deferred: 0,
+      skipped: 0,
+      failures: 1,
+      incidentRecorded: true,
+    });
+  });
+
+  const incidentCall = harness.calls.find((call) => call.rpc === "recordIncident");
+  assert.equal(incidentCall.args.p_source, "reconciliation");
+  assert.equal(incidentCall.args.p_reason_code, "transaction_id_mismatch");
+  assert.equal(incidentCall.args.p_payment_id, "payment-123");
+  assert.equal(incidentCall.args.p_invoice_number, "INV-123");
+  assert.equal(incidentCall.args.p_gateway_status, "SUCCESS");
+  assert.equal(
+    incidentCall.args.p_existing_gateway_transaction_id,
+    "existing-transaction-id",
+  );
+  assert.equal(incidentCall.args.p_gateway_transaction_id, null);
+});
+
+test("reconciliation_handler_surfaces_returned_incident_rpc_error_without_details", async () => {
+  const harness = reconciliationHarness({
+    recordResult: { error: { message: "doku_reconciliation_transaction_mismatch" } },
+    incidentResult: {
+      data: null,
+      error: { message: "sensitive database detail" },
+    },
+  });
+
+  await withCronSecret(cronSecret, async () => {
+    const response = await harness.handle(
+      cronRequest(`Bearer ${cronSecret}`),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      processed: 0,
+      deferred: 0,
+      skipped: 0,
+      failures: 1,
+      incidentRecorded: false,
+      error: "incident_recording_failed",
+    });
+  });
+});
+
+test("reconciliation_handler_treats_incident_rpc_error_as_failure_even_with_data", async () => {
+  const harness = reconciliationHarness({
+    recordResult: { error: { message: "doku_reconciliation_transaction_mismatch" } },
+    incidentResult: {
+      data: "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+      error: { message: "sensitive database detail" },
+    },
+  });
+
+  await withCronSecret(cronSecret, async () => {
+    const response = await harness.handle(
+      cronRequest(`Bearer ${cronSecret}`),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      processed: 0,
+      deferred: 0,
+      skipped: 0,
+      failures: 1,
+      incidentRecorded: false,
+      error: "incident_recording_failed",
+    });
+  });
+});
+
+test("reconciliation_handler_rejects_missing_or_invalid_incident_ids", async () => {
+  for (const incidentResult of [
+    { data: null, error: null },
+    { data: "not-a-uuid", error: null },
+  ]) {
+    const harness = reconciliationHarness({
+      recordResult: {
+        error: { message: "doku_reconciliation_transaction_mismatch" },
+      },
+      incidentResult,
+    });
+
+    await withCronSecret(cronSecret, async () => {
+      const response = await harness.handle(
+        cronRequest(`Bearer ${cronSecret}`),
+      );
+
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), {
+        processed: 0,
+        deferred: 0,
+        skipped: 0,
+        failures: 1,
+        incidentRecorded: false,
+        error: "incident_recording_failed",
+      });
+    });
+  }
+});
+
+test("reconciliation_handler_keeps_incident_rpc_exception_as_a_failure", async () => {
+  const harness = reconciliationHarness({
+    recordResult: { error: { message: "doku_reconciliation_transaction_mismatch" } },
+    incidentThrows: new Error("database unavailable"),
+  });
+
+  await withCronSecret(cronSecret, async () => {
+    const response = await harness.handle(
+      cronRequest(`Bearer ${cronSecret}`),
+    );
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      processed: 0,
+      deferred: 0,
+      skipped: 0,
+      failures: 1,
+      incidentRecorded: false,
+      error: "incident_recording_failed",
+    });
+  });
+
+  assert.equal(harness.calls.some((call) => call.rpc === "defer"), false);
+});
+
+test("doku_reconciliation_migration_contains_rollback_safe_incident_design", () => {
+  const migrationPath = new URL(
+    "../supabase/migrations/20261121000000_doku_reconciliation_success.sql",
+    import.meta.url,
+  );
+  const migration = readFileSync(migrationPath, "utf8");
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.doku_reconciliation_incidents/);
+  assert.match(migration, /doku_record_reconciliation_incident/);
+  assert.match(migration, /paid_state_repaired/);
+  assert.match(migration, /contradictory_success/);
+  assert.match(migration, /FOR UPDATE/);
+  assert.match(migration, /REVOKE ALL ON TABLE public\.doku_reconciliation_incidents/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.doku_record_reconciliation_incident/);
+});
+
+test("doku_reconciliation_migration_has_full_incident_schema_preflight", () => {
+  const migration = readFileSync(
+    new URL(
+      "../supabase/migrations/20261121000000_doku_reconciliation_success.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(migration, /doku_validate_reconciliation_incident_schema/);
+  assert.match(migration, /doku_reconciliation_incident_missing_column/);
+  assert.match(migration, /doku_reconciliation_incident_invalid_type/);
+  assert.match(migration, /doku_reconciliation_incident_missing_check/);
+  assert.match(migration, /doku_reconciliation_incident_missing_unique_index/);
+  assert.match(migration, /doku_reconciliation_incident_privilege/);
+  assert.match(migration, /doku_reconciliation_incident_rls/);
+  assert.match(migration, /doku_reconciliation_incident_foreign_key/);
+});
+
+test("doku_reconciliation_concurrency_test_is_explicitly_not_run", () => {
+  const testPath = new URL(
+    "../supabase/tests/doku_reconciliation_concurrency.test.sql",
+    import.meta.url,
+  );
+  const testSql = readFileSync(testPath, "utf8");
+
+  assert.match(testSql, /NOT RUN/i);
+  assert.match(testSql, /external PostgreSQL runner/i);
+  assert.doesNotMatch(testSql, /CREATE EXTENSION IF NOT EXISTS dblink/i);
+  assert.doesNotMatch(testSql, /pg_advisory/i);
+});
+
+test("doku_reconciliation_preflight_pgtest_covers_behavioral_schema_failures", () => {
+  const testSql = readFileSync(
+    new URL(
+      "../supabase/tests/doku_reconciliation_preflight.test.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(testSql, /ALTER TABLE public\.doku_reconciliation_incidents DROP COLUMN reason_code/);
+  assert.match(testSql, /ALTER COLUMN amount TYPE text/);
+  assert.match(testSql, /DROP CONSTRAINT doku_reconciliation_incidents_reason_code_check/);
+  assert.match(testSql, /DROP CONSTRAINT doku_reconciliation_incidents_unique_key/);
+  assert.match(testSql, /GRANT SELECT ON TABLE public\.doku_reconciliation_incidents TO authenticated/);
+  assert.match(testSql, /DISABLE ROW LEVEL SECURITY/);
+  assert.match(testSql, /SELECT \* FROM finish\(\)/);
+});
+
+test("doku_reconciliation_returns_gateway_transaction_id_for_mismatch_evidence", () => {
+  const migration = readFileSync(
+    new URL(
+      "../supabase/migrations/20261121000000_doku_reconciliation_success.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const statusModule = readFileSync(
+    new URL("../lib/doku/check-status.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /gateway_transaction_id text/,
+  );
+  assert.match(
+    migration,
+    /payment\.gateway_transaction_id/,
+  );
+  assert.match(
+    statusModule,
+    /gatewayTransactionId/,
+  );
+});
+
+test("doku_reconciliation_migration_has_valid_validator_call_and_paid_guard", () => {
+  const migration = readFileSync(
+    new URL(
+      "../supabase/migrations/20261121000000_doku_reconciliation_success.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    migration,
+    /^PERFORM public\.doku_validate_reconciliation_incident_schema\(\);$/m,
+  );
+  assert.match(
+    migration,
+    /DO \$doku_validate_incident_call\$[\s\S]*PERFORM public\.doku_validate_reconciliation_incident_schema\(\)/,
+  );
+  assert.match(
+    migration,
+    /IF v_status IN \('PENDING', 'FAILED'\)[\s\S]*v_payment\.payment_status = 'paid'/,
+  );
+  assert.match(migration, /incident_key text NOT NULL/);
+  assert.match(migration, /UNIQUE \(gateway, incident_key\)/);
+  assert.doesNotMatch(migration, /doku_reconciliation_incidents_event_key/);
+});
+
+test("incident observation preflight validates index definitions and observation reason", () => {
+  const migration = readFileSync(
+    new URL(
+      "../supabase/migrations/20261123100000_doku_incident_observations.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const preflightTest = readFileSync(
+    new URL(
+      "../supabase/tests/doku_reconciliation_preflight.test.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const successTest = readFileSync(
+    new URL(
+      "../supabase/tests/doku_reconciliation_success.test.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(migration, /pg_catalog\.unnest\(index_row\.indkey\)/);
+  assert.match(migration, /pg_catalog\.pg_get_expr\(index_row\.indpred/);
+  assert.match(preflightTest, /same-name notification index with wrong columns/);
+  assert.match(preflightTest, /same-name notification index with wrong predicate/);
+  assert.match(preflightTest, /same-name first-event index with wrong columns/);
+  assert.match(preflightTest, /same-name first-event index with wrong predicate/);
+  assert.match(
+    preflightTest,
+    /DROP INDEX public\.doku_reconciliation_incident_observations_notification_event_key;\s*SELECT throws_ok\(\s*'SELECT public\.doku_validate_reconciliation_incident_observations_schema\(\)'/,
+  );
+  assert.match(successTest, /observation\.reason_code = 'notification_replay_conflict'/);
 });

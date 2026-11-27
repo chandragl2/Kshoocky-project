@@ -1,9 +1,15 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Circle, CircleDot, Loader2, PackageOpen } from "lucide-react";
+import {
+  Check,
+  Circle,
+  CircleDot,
+  Loader2,
+  PackageOpen,
+} from "lucide-react";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database, Json } from "@/lib/supabase/database";
@@ -15,6 +21,12 @@ import {
 import {
   shipmentStatusLabel,
 } from "@/lib/shipment-status";
+import { getDokuPaymentUrlFromResponse } from "@/lib/doku/payment-url";
+import {
+  parseDokuPaymentDetails,
+  resolveDisplayedPaymentStatus,
+  type PaymentDetails,
+} from "@/lib/doku/payment-view";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type Shipment = Pick<
@@ -51,7 +63,12 @@ const paymentLabels: Record<string, string> = {
   paid: "Pembayaran Berhasil",
   failed: "Pembayaran Gagal",
   refunded: "Dana Dikembalikan",
+  expired: "Pembayaran Kedaluwarsa",
 };
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function isRecord(value: Json): value is { [key: string]: Json | undefined } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -91,6 +108,12 @@ export default function OrderResultPage() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [shipment, setShipment] = useState<Shipment | null>(null);
   const [shipmentLogs, setShipmentLogs] = useState<ShipmentLog[]>([]);
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(
+    null,
+  );
+  const [paymentError, setPaymentError] = useState("");
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
+  const startingPaymentRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -129,6 +152,38 @@ export default function OrderResultPage() {
           return;
         }
 
+        let loadedPaymentDetails: PaymentDetails | null = null;
+        let loadedPaymentError = "";
+        if (orderData.payment_status === "pending") {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            try {
+              const statusResponse = await fetch(
+                `/api/payments/doku/status/${encodeURIComponent(orderData.id)}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                  },
+                },
+              );
+              const statusBody: unknown = await statusResponse
+                .json()
+                .catch(() => null);
+              if (statusResponse.ok) {
+                loadedPaymentDetails = parseDokuPaymentDetails(statusBody);
+              }
+              if (!loadedPaymentDetails) {
+                loadedPaymentError =
+                  "Status pembayaran belum dapat diperbarui.";
+              }
+            } catch {
+              loadedPaymentError = "Status pembayaran belum dapat diperbarui.";
+            }
+          }
+        }
+
         const { data: itemData, error: itemsError } = await supabase
           .from("order_items")
           .select("id, product_title, quantity, unit_price, subtotal, variant_sku_snapshot, variant_label_snapshot, variant_options_snapshot")
@@ -159,6 +214,8 @@ export default function OrderResultPage() {
           setItems(itemData ?? []);
           setShipment(shipmentData);
           setShipmentLogs(shipmentLogData);
+          setPaymentDetails(loadedPaymentDetails);
+          setPaymentError(loadedPaymentError);
         }
       } catch {
         if (isMounted) setLoadError(true);
@@ -172,6 +229,63 @@ export default function OrderResultPage() {
       isMounted = false;
     };
   }, [params.orderId, router]);
+
+  const displayedPaymentStatus = resolveDisplayedPaymentStatus(
+    order?.payment_status ?? "pending",
+    paymentDetails,
+  );
+
+  useEffect(() => {
+    if (!order || displayedPaymentStatus !== "pending") return;
+
+    let isMounted = true;
+    let isRefreshing = false;
+    async function refreshPaymentStatus() {
+      if (isRefreshing || document.visibilityState === "hidden") return;
+      isRefreshing = true;
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const response = await fetch(
+          `/api/payments/doku/status/${encodeURIComponent(order.id)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          },
+        );
+        if (!response.ok) return;
+        const details = parseDokuPaymentDetails(
+          await response.json().catch(() => null),
+        );
+        if (isMounted && details) setPaymentDetails(details);
+      } catch {
+        // Keep the last known server status; the next poll can retry.
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(
+      () => void refreshPaymentStatus(),
+      15_000,
+    );
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshPaymentStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [displayedPaymentStatus, order]);
 
   const addressData = order
     ? parseShippingAddress(order.shipping_address)
@@ -188,6 +302,61 @@ export default function OrderResultPage() {
           .join(" "),
       ].filter(Boolean)
     : [];
+  async function continuePayment() {
+    if (!order || startingPaymentRef.current) return;
+    startingPaymentRef.current = true;
+    setIsStartingPayment(true);
+    setPaymentError("");
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+      if (sessionError || !session?.access_token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch("/api/payments/doku/create", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const responseBody: unknown = await response.json().catch(() => null);
+      if (
+        !response.ok ||
+        !isUnknownRecord(responseBody)
+      ) {
+        setPaymentError(
+          isUnknownRecord(responseBody) &&
+            typeof responseBody.error === "string"
+            ? responseBody.error
+            : "Pembayaran belum dapat dilanjutkan. Coba lagi sebentar.",
+        );
+        return;
+      }
+
+      let paymentUrl: string;
+      try {
+        paymentUrl = getDokuPaymentUrlFromResponse(responseBody);
+      } catch {
+        setPaymentError("Tautan pembayaran tidak valid. Hubungi dukungan.");
+        return;
+      }
+      window.location.assign(paymentUrl);
+    } catch {
+      setPaymentError(
+        "Pembayaran belum dapat dilanjutkan. Coba lagi sebentar.",
+      );
+    } finally {
+      startingPaymentRef.current = false;
+      setIsStartingPayment(false);
+    }
+  }
 
   return (
     <main className="mx-auto max-w-[980px] px-5 py-8 sm:px-8 lg:px-10">
@@ -245,7 +414,8 @@ export default function OrderResultPage() {
               <div>
                 <p className="text-xs text-slate-500">Status Pembayaran</p>
                 <p className="mt-1 font-semibold text-slate-800">
-                  {paymentLabels[order.payment_status] ?? order.payment_status}
+                  {paymentLabels[displayedPaymentStatus] ??
+                    displayedPaymentStatus}
                 </p>
               </div>
               <div>
@@ -368,14 +538,47 @@ export default function OrderResultPage() {
                   {formatCurrency(order.total_price)}
                 </span>
               </div>
-              {order.payment_status === "pending" && (
-                <button
-                  type="button"
-                  disabled
-                  className="mt-5 min-h-11 w-full cursor-not-allowed rounded-lg bg-slate-300 px-4 py-3 text-sm font-bold text-white"
-                >
-                  Pembayaran Segera Tersedia
-                </button>
+              {displayedPaymentStatus === "pending" && (
+                <>
+                  {paymentDetails?.paymentExpiresAt && (
+                    <p className="mt-4 text-xs text-slate-500">
+                      Batas pembayaran:{" "}
+                      {formatDate(paymentDetails.paymentExpiresAt)}
+                    </p>
+                  )}
+                  {paymentError && (
+                    <p
+                      role="alert"
+                      className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
+                    >
+                      {paymentError}
+                    </p>
+                  )}
+                  {displayedPaymentStatus === "pending" &&
+                  (!paymentDetails?.paymentExpiresAt ||
+                    Date.parse(paymentDetails.paymentExpiresAt) > Date.now()) ? (
+                    <button
+                      type="button"
+                      onClick={() => void continuePayment()}
+                      disabled={isStartingPayment}
+                      className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {isStartingPayment && (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      )}
+                      {isStartingPayment
+                        ? "Memuat pembayaran..."
+                        : paymentDetails?.paymentUrl
+                          ? "Lanjutkan Pembayaran"
+                          : "Mulai Pembayaran"}
+                    </button>
+                  ) : (
+                    <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                      Sesi pembayaran telah mencapai batas waktu. Status akhir
+                      sedang menunggu konfirmasi DOKU.
+                    </p>
+                  )}
+                </>
               )}
             </aside>
           </div>

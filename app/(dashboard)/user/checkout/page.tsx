@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, MapPin, PackageOpen, ShoppingBag } from "lucide-react";
 import { dispatchCartUpdated, findUserCart } from "@/lib/cart";
+import { getDokuPaymentUrlFromResponse } from "@/lib/doku/payment-url";
 import { formatCurrency } from "@/lib/format-currency";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database";
@@ -24,6 +25,9 @@ type CheckoutItem = Pick<CartItem, "id" | "product_id" | "variant_id" | "quantit
     "id" | "sku" | "label" | "image_url" | "price" | "stock" | "status"
   > | null;
 };
+type CheckoutAttempt = { idempotencyKey: string; addressId: string };
+
+const checkoutAttemptStorageKey = "kshoocky.checkout.attempt";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -41,6 +45,36 @@ export default function CheckoutPage() {
   const [loadError, setLoadError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const checkoutAttemptRef = useRef<CheckoutAttempt | null>(null);
+  const [checkoutAttempt, setCheckoutAttempt] =
+    useState<CheckoutAttempt | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(checkoutAttemptStorageKey);
+      if (!saved) return;
+      const parsed: unknown = JSON.parse(saved);
+      if (
+        isRecord(parsed) &&
+        typeof parsed.idempotencyKey === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          parsed.idempotencyKey,
+        ) &&
+        typeof parsed.addressId === "string"
+      ) {
+        const attempt = {
+          idempotencyKey: parsed.idempotencyKey,
+          addressId: parsed.addressId,
+        };
+        checkoutAttemptRef.current = attempt;
+        setCheckoutAttempt(attempt);
+        setSelectedAddressId(attempt.addressId);
+      }
+    } catch {
+      checkoutAttemptRef.current = null;
+      setCheckoutAttempt(null);
+    }
+  }, []);
 
   const loadCheckout = useCallback(async () => {
     setIsLoading(true);
@@ -157,6 +191,7 @@ export default function CheckoutPage() {
 
     setIsSubmitting(true);
     setError("");
+    let createdOrderId: string | null = null;
     try {
       const {
         data: { session },
@@ -167,16 +202,50 @@ export default function CheckoutPage() {
         return;
       }
 
+      let attempt = checkoutAttemptRef.current;
+      if (attempt && attempt.addressId !== selectedAddressId) {
+        setError(
+          "Selesaikan atau ulangi checkout sebelumnya sebelum mengganti alamat.",
+        );
+        return;
+      }
+      if (!attempt) {
+        attempt = {
+          idempotencyKey: crypto.randomUUID(),
+          addressId: selectedAddressId,
+        };
+        checkoutAttemptRef.current = attempt;
+        setCheckoutAttempt(attempt);
+        try {
+          sessionStorage.setItem(
+            checkoutAttemptStorageKey,
+            JSON.stringify(attempt),
+          );
+        } catch {
+          // The in-memory key still protects retries during this page session.
+        }
+      }
+
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
+          "Idempotency-Key": attempt.idempotencyKey,
         },
-        body: JSON.stringify({ addressId: selectedAddressId }),
+        body: JSON.stringify({ addressId: attempt.addressId }),
       });
       const responseBody: unknown = await response.json().catch(() => null);
       if (!response.ok) {
+        if (response.status >= 400 && response.status < 500 && response.status !== 401) {
+          checkoutAttemptRef.current = null;
+          setCheckoutAttempt(null);
+          try {
+            sessionStorage.removeItem(checkoutAttemptStorageKey);
+          } catch {
+            // Storage cleanup is best-effort; the request was definitively rejected.
+          }
+        }
         const serverMessage =
           isRecord(responseBody) && typeof responseBody.error === "string"
             ? responseBody.error
@@ -194,10 +263,40 @@ export default function CheckoutPage() {
         return;
       }
 
+      createdOrderId = orderId;
+      checkoutAttemptRef.current = null;
+      setCheckoutAttempt(null);
+      try {
+        sessionStorage.removeItem(checkoutAttemptStorageKey);
+      } catch {
+        // The completed order is still idempotent on the server.
+      }
       dispatchCartUpdated();
+      const paymentResponse = await fetch("/api/payments/doku/create", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId }),
+      });
+      const paymentBody: unknown = await paymentResponse.json().catch(() => null);
+      const paymentUrl =
+        paymentResponse.ok && isRecord(paymentBody)
+          ? getDokuPaymentUrlFromResponse(paymentBody)
+          : null;
+      if (paymentUrl) {
+        window.location.assign(paymentUrl);
+        return;
+      }
       router.push(`/user/orders/${encodeURIComponent(orderId)}`);
     } catch {
-      setError("Terjadi kesalahan saat membuat pesanan. Silakan coba lagi.");
+      if (createdOrderId) {
+        dispatchCartUpdated();
+        router.push(`/user/orders/${encodeURIComponent(createdOrderId)}`);
+      } else {
+        setError("Terjadi kesalahan saat membuat pesanan. Silakan coba lagi.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -293,6 +392,7 @@ export default function CheckoutPage() {
                         value={address.id}
                         checked={selectedAddressId === address.id}
                         onChange={() => setSelectedAddressId(address.id)}
+                        disabled={checkoutAttempt !== null}
                         className="mt-1 h-4 w-4 shrink-0 accent-[#0F3854]"
                       />
                       <span className="min-w-0 text-sm text-slate-600">
@@ -443,7 +543,11 @@ export default function CheckoutPage() {
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0F3854] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#174e70] disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSubmitting ? "Membuat Pesanan..." : "Pesan Sekarang"}
+              {isSubmitting
+                ? "Membuat Pembayaran..."
+                : checkoutAttempt
+                  ? "Lanjutkan Checkout"
+                  : "Lanjutkan Pembayaran"}
             </button>
             {!selectedAddressId && addresses.length > 0 && (
               <p className="mt-2 text-xs font-semibold text-red-700">

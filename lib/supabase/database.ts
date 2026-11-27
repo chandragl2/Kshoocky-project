@@ -13,6 +13,9 @@ export type ProfileRole = "customer" | "admin";
 export type ProductStatus = "active" | "inactive" | "out_of_stock";
 export type ProductVariantStatus = "active" | "inactive" | "out_of_stock";
 export type InventoryMovementType = "checkout_decrement" | "order_cancel_restore" | "admin_adjustment";
+export type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "refunded" | "cancelled";
+export type OrderPaymentStatus = "pending" | "paid" | "failed" | "refunded" | "expired";
+export type PaymentSessionState = "creating" | "active" | "uncertain" | "expired" | "cancelled";
 export type PreorderEventStatus = "draft" | "active" | "closed" | "cancelled";
 export type FeaturedEventMediaType = "image" | "video";
 
@@ -535,7 +538,7 @@ export interface Database {
           shipping_fee: number;
           discount: number;
           total_price: number;
-          payment_status: string;
+          payment_status: OrderPaymentStatus;
           order_status: OrderStatus;
           shipping_address: Json;
           notes: string;
@@ -550,7 +553,7 @@ export interface Database {
           shipping_fee: number;
           discount: number;
           total_price: number;
-          payment_status: string;
+          payment_status: OrderPaymentStatus;
           order_status: OrderStatus;
           shipping_address: Json;
           notes: string;
@@ -565,7 +568,7 @@ export interface Database {
           shipping_fee?: number;
           discount?: number;
           total_price?: number;
-          payment_status?: string;
+          payment_status?: OrderPaymentStatus;
           order_status?: OrderStatus;
           shipping_address?: Json;
           notes?: string;
@@ -738,7 +741,16 @@ export interface Database {
           payment_gateway: string | null;
           transaction_id: string | null;
           gateway_transaction_id: string | null;
-          payment_status: string;
+          gateway_invoice_number: string | null;
+          gateway_request_id: string | null;
+          gateway_request_body: string | null;
+          payment_url: string | null;
+          gateway_expires_at: string | null;
+          payment_session_state: PaymentSessionState | null;
+          next_reconcile_at: string | null;
+          reconciliation_error_code: string | null;
+          last_notification_status: string | null;
+          payment_status: PaymentStatus;
           amount: number;
           paid_at: string | null;
           expired_at: string | null;
@@ -753,7 +765,16 @@ export interface Database {
           payment_gateway?: string | null;
           transaction_id?: string | null;
           gateway_transaction_id?: string | null;
-          payment_status: string;
+          gateway_invoice_number?: string | null;
+          gateway_request_id?: string | null;
+          gateway_request_body?: string | null;
+          payment_url?: string | null;
+          gateway_expires_at?: string | null;
+          payment_session_state?: PaymentSessionState | null;
+          next_reconcile_at?: string | null;
+          reconciliation_error_code?: string | null;
+          last_notification_status?: string | null;
+          payment_status?: PaymentStatus;
           amount: number;
           paid_at?: string | null;
           expired_at?: string | null;
@@ -768,7 +789,16 @@ export interface Database {
           payment_gateway?: string | null;
           transaction_id?: string | null;
           gateway_transaction_id?: string | null;
-          payment_status?: string;
+          gateway_invoice_number?: string | null;
+          gateway_request_id?: string | null;
+          gateway_request_body?: string | null;
+          payment_url?: string | null;
+          gateway_expires_at?: string | null;
+          payment_session_state?: PaymentSessionState | null;
+          next_reconcile_at?: string | null;
+          reconciliation_error_code?: string | null;
+          last_notification_status?: string | null;
+          payment_status?: PaymentStatus;
           amount?: number;
           paid_at?: string | null;
           expired_at?: string | null;
@@ -785,6 +815,93 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      checkout_idempotency: {
+        Row: {
+          user_id: string;
+          idempotency_key: string;
+          address_id: string;
+          order_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          idempotency_key: string;
+          address_id: string;
+          order_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          idempotency_key?: string;
+          address_id?: string;
+          order_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "checkout_idempotency_address_id_fkey";
+            columns: ["address_id"];
+            isOneToOne: false;
+            referencedRelation: "addresses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "checkout_idempotency_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      doku_webhook_events: {
+        Row: {
+          id: string;
+          gateway: string;
+          event_id: string;
+          body_digest: string;
+          invoice_number: string;
+          transaction_status: string;
+          outcome: string;
+          created_at: string;
+          processed_at: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          review_note: string | null;
+        };
+        Insert: {
+          id?: string;
+          gateway?: string;
+          event_id: string;
+          body_digest: string;
+          invoice_number: string;
+          transaction_status: string;
+          outcome: string;
+          created_at?: string;
+          processed_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          review_note?: string | null;
+        };
+        Update: {
+          id?: string;
+          gateway?: string;
+          event_id?: string;
+          body_digest?: string;
+          invoice_number?: string;
+          transaction_status?: string;
+          outcome?: string;
+          created_at?: string;
+          processed_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          review_note?: string | null;
+        };
+        Relationships: [];
       };
       shipments: {
         Row: {
@@ -1138,6 +1255,51 @@ export interface Database {
         Args: { p_address_id: string };
         Returns: string;
       };
+      checkout_catalog_variant_idempotent: {
+        Args: { p_address_id: string; p_idempotency_key: string };
+        Returns: string;
+      };
+      doku_begin_payment: {
+        Args: {
+          p_order_id: string;
+          p_request_id: string;
+          p_request_body: string;
+          p_expires_at: string;
+        };
+        Returns: {
+          payment_id: string;
+          gateway_invoice_number: string;
+          gateway_request_id: string;
+          gateway_request_body: string;
+          payment_status: string;
+          payment_session_state: PaymentSessionState;
+          payment_url: string | null;
+          gateway_expires_at: string;
+        }[];
+      };
+      doku_save_checkout_response: {
+        Args: {
+          p_payment_id: string;
+          p_payment_url: string;
+          p_gateway_expires_at: string;
+        };
+        Returns: undefined;
+      };
+      doku_mark_payment_uncertain: {
+        Args: { p_payment_id: string };
+        Returns: undefined;
+      };
+      doku_get_order_payment_status: {
+        Args: { p_order_id: string };
+        Returns: {
+          order_payment_status: OrderPaymentStatus;
+          order_status: string;
+          payment_status: PaymentStatus;
+          payment_url: string | null;
+          payment_expires_at: string | null;
+          payment_session_state: PaymentSessionState | null;
+        }[];
+      };
       doku_list_reconciliation_candidates: {
         Args: { p_limit: number };
         Returns: {
@@ -1145,15 +1307,42 @@ export interface Database {
           invoice_number: string;
           original_request_id: string;
           payment_expires_at: string;
+          gateway_transaction_id: string | null;
         }[];
       };
       doku_recover_creating_payment_attempts: {
         Args: Record<PropertyKey, never>;
         Returns: number;
       };
+      doku_list_webhook_incidents: {
+        Args: { p_limit: number; p_offset?: number };
+        Returns: {
+          event_id: string;
+          invoice_number: string;
+          transaction_status: string;
+          outcome: string;
+          created_at: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          review_note: string | null;
+        }[];
+      };
+      doku_mark_webhook_incident_reviewed: {
+        Args: { p_event_id: string; p_review_note: string };
+        Returns: boolean;
+      };
       doku_defer_payment_reconciliation: {
         Args: { p_payment_id: string; p_error_code: string };
         Returns: undefined;
+      };
+      doku_expire_payment: {
+        Args: {
+          p_payment_id: string;
+          p_invoice_number: string;
+          p_amount: number;
+          p_original_request_id: string;
+        };
+        Returns: string;
       };
       doku_record_notification: {
         Args: {
@@ -1168,6 +1357,28 @@ export interface Database {
         };
         Returns: string;
       };
+      doku_record_reconciliation_incident: {
+        Args: {
+          p_source: "reconciliation" | "notification";
+          p_event_id: string | null;
+          p_body_digest: string | null;
+          p_payment_id: string | null;
+          p_order_id: string | null;
+          p_invoice_number: string | null;
+          p_amount: number | null;
+          p_original_request_id: string | null;
+          p_gateway_transaction_id: string | null;
+          p_existing_gateway_transaction_id: string | null;
+          p_gateway_status: string | null;
+          p_gateway_transaction_status: string | null;
+          p_local_payment_status: string | null;
+          p_local_order_payment_status: string | null;
+          p_local_order_status: string | null;
+          p_local_payment_session_state: string | null;
+          p_reason_code: string;
+        };
+        Returns: string;
+      };
       doku_record_reconciliation: {
         Args: {
           p_payment_id: string;
@@ -1178,6 +1389,10 @@ export interface Database {
           p_gateway_transaction_id: string | null;
         };
         Returns: string;
+      };
+      doku_restore_order_inventory_once: {
+        Args: { p_order_id: string; p_created_by: string | null };
+        Returns: undefined;
       };
       checkout_catalog: {
         Args: { p_address_id: string };

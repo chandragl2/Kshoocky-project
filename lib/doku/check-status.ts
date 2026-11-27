@@ -15,6 +15,7 @@ type JsonObject = Record<string, unknown>;
 
 export type DokuCheckoutStatus = {
   amount: number;
+  gatewayTransactionId: string | null;
   invoiceNumber: string;
   orderStatus: string | null;
   originalRequestId: string | null;
@@ -143,9 +144,22 @@ export async function getDokuCheckoutStatus({
     typeof transaction?.original_request_id === "string"
       ? transaction.original_request_id
       : null;
+  const transactionId = transaction?.id ?? transaction?.transaction_id;
+  const gatewayTransactionId =
+    typeof transactionId === "string" ? transactionId : null;
+  if (
+    transactionId !== undefined &&
+    transactionId !== null &&
+    (typeof transactionId !== "string" ||
+      transactionId.trim().length === 0 ||
+      transactionId.length > 128)
+  ) {
+    throw new Error("DOKU Check Status transaction ID is invalid.");
+  }
 
   return {
     amount,
+    gatewayTransactionId,
     invoiceNumber,
     orderStatus,
     originalRequestId,

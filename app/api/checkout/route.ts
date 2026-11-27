@@ -1,6 +1,5 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
-import type { Database } from "@/lib/supabase/database";
+import { createAuthenticatedSupabaseClient } from "@/lib/supabase/server";
 
 const checkoutErrors: Record<string, { status: number; message: string }> = {
   checkout_address_invalid: {
@@ -68,25 +67,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!supabaseUrl || !publishableKey) {
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+  if (
+    !idempotencyKey ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      idempotencyKey,
+    )
+  ) {
+    return NextResponse.json(
+      { error: "Checkout request expired. Silakan coba lagi." },
+      { status: 400 },
+    );
+  }
+
+  let supabase;
+  try {
+    supabase = createAuthenticatedSupabaseClient(accessToken);
+  } catch {
     return NextResponse.json(
       { error: "Checkout gagal dimuat. Silakan coba lagi." },
       { status: 503 },
     );
   }
-
-  const supabase = createSupabaseClient<Database>(supabaseUrl, publishableKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
-  });
 
   try {
     const {
@@ -101,8 +103,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: orderId, error: checkoutError } = await supabase.rpc(
-      "checkout_catalog_variant",
-      { p_address_id: addressId },
+      "checkout_catalog_variant_idempotent",
+      { p_address_id: addressId, p_idempotency_key: idempotencyKey },
     );
     if (checkoutError) {
       if (process.env.NODE_ENV === "development") {

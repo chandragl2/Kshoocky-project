@@ -19,6 +19,7 @@ export type VerifiedDokuNotification = {
   bodyDigest: string;
   eventId: string;
   eventTime: string | null;
+  gatewayTransactionId: string | null;
   invoiceNumber: string;
   originalRequestId: string | null;
   status: string;
@@ -123,6 +124,10 @@ export function verifyDokuNotification({
   const invoiceNumber = parsed.order.invoice_number;
   const amount = parseAmount(parsed.order.amount);
   const originalRequestId = parsed.transaction.original_request_id;
+  const transactionId =
+    parsed.transaction.id ?? parsed.transaction.transaction_id;
+  const gatewayTransactionId =
+    typeof transactionId === "string" ? transactionId : null;
   if (
     typeof status !== "string" ||
     !/^[A-Za-z0-9_]{1,50}$/.test(status) ||
@@ -130,6 +135,11 @@ export function verifyDokuNotification({
     invoiceNumber.length < 1 ||
     invoiceNumber.length > 64 ||
     amount === null ||
+    (transactionId !== undefined &&
+      transactionId !== null &&
+      (typeof transactionId !== "string" ||
+        transactionId.trim().length === 0 ||
+        transactionId.length > 128)) ||
     (originalRequestId !== undefined &&
       originalRequestId !== null &&
       (typeof originalRequestId !== "string" ||
@@ -156,6 +166,7 @@ export function verifyDokuNotification({
     bodyDigest: createHash("sha256").update(body, "utf8").digest("base64"),
     eventId: headers.requestId,
     eventTime,
+    gatewayTransactionId,
     invoiceNumber,
     originalRequestId: requestId,
     status: normalizedStatus,
