@@ -7,6 +7,32 @@ import { useState } from "react";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
+const allowedCustomerNextPathPattern =
+  /^\/user\/orders(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$/i;
+
+function resolveSafeNextPath(rawNext: string | null): string | null {
+  if (!rawNext) return null;
+  const trimmed = rawNext.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("\\")) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed, "https://kshoocky.local");
+    if (
+      parsed.origin !== "https://kshoocky.local" ||
+      !parsed.pathname.startsWith("/") ||
+      parsed.pathname.startsWith("//") ||
+      !allowedCustomerNextPathPattern.test(parsed.pathname)
+    ) {
+      return null;
+    }
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -91,7 +117,10 @@ export default function LoginPage() {
       if (profile.role === "admin") {
         router.replace("/admin");
       } else if (profile.role === "customer") {
-        router.replace("/user");
+        const safeNext = resolveSafeNextPath(
+          new URLSearchParams(window.location.search).get("next"),
+        );
+        router.replace(safeNext ?? "/user");
       } else {
         await supabase.auth.signOut();
         setFormError("Role akun tidak valid. Silakan hubungi administrator.");
