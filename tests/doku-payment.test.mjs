@@ -1960,3 +1960,61 @@ test("doku_notification_amount_mismatch_is_recorded_without_marking_paid", () =>
   assert.ok(mismatchGuard >= 0);
   assert.ok(paidTransition > mismatchGuard);
 });
+
+test("doku_payment_status_diagnostics_emit_only_safe_allowlisted_fields", () => {
+  const originalConsoleError = console.error;
+  const loggedLines = [];
+  console.error = (...args) => {
+    loggedLines.push(args.map(String).join(" "));
+  };
+
+  try {
+    diagnosticModule.logDokuPaymentStatusDiagnostic({
+      correlationId: "11111111-1111-4111-8111-111111111111",
+      stage: "service_client_init_failed",
+      category: "service_client_init_failed",
+      httpStatus: 503,
+      // Extra fields must never be serialized.
+      secret: "should-not-appear",
+    });
+    diagnosticModule.logDokuPaymentStatusDiagnostic({
+      correlationId: "not-a-uuid",
+      stage: "service_client_init_failed",
+      category: "service_client_init_failed",
+      httpStatus: 503,
+    });
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(loggedLines.length, 1);
+  const parsed = JSON.parse(loggedLines[0]);
+  assert.deepEqual(parsed, {
+    event: "doku.payment_status.diagnostic",
+    correlationId: "11111111-1111-4111-8111-111111111111",
+    stage: "service_client_init_failed",
+    category: "service_client_init_failed",
+    httpStatus: 503,
+  });
+
+  const statusRoute = readFileSync(
+    new URL("../app/api/payments/doku/status/[orderId]/route.ts", import.meta.url),
+    "utf8",
+  );
+  for (const category of [
+    "auth_client_init_failed",
+    "service_client_init_failed",
+    "auth_verification_failed",
+    "order_lookup_failed",
+    "payment_status_rpc_failed",
+    "doku_config_invalid",
+    "payment_url_validation_failed",
+    "payment_status_unexpected_error",
+  ]) {
+    assert.ok(
+      statusRoute.includes(category),
+      `Expected status route to log category ${category}`,
+    );
+  }
+  assert.doesNotMatch(statusRoute, /console\.(log|error|warn)\(/);
+});

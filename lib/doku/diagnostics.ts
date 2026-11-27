@@ -192,3 +192,62 @@ export function logDokuCheckoutDiagnostic(
     // Diagnostics must never interrupt checkout processing.
   }
 }
+
+export const dokuPaymentStatusDiagnosticCategories = [
+  "auth_client_init_failed",
+  "service_client_init_failed",
+  "auth_verification_failed",
+  "order_lookup_failed",
+  "payment_status_rpc_failed",
+  "doku_config_invalid",
+  "payment_url_validation_failed",
+  "payment_status_unexpected_error",
+] as const;
+
+export type DokuPaymentStatusDiagnosticCategory =
+  (typeof dokuPaymentStatusDiagnosticCategories)[number];
+
+export type DokuPaymentStatusDiagnosticLog = {
+  correlationId: string;
+  stage: DokuPaymentStatusDiagnosticCategory;
+  category: DokuPaymentStatusDiagnosticCategory;
+  httpStatus?: number;
+};
+
+const statusDiagnosticCategorySet = new Set<string>(
+  dokuPaymentStatusDiagnosticCategories,
+);
+
+export function logDokuPaymentStatusDiagnostic(
+  input: DokuPaymentStatusDiagnosticLog,
+) {
+  try {
+    if (
+      !uuidPattern.test(input.correlationId) ||
+      !statusDiagnosticCategorySet.has(input.stage) ||
+      !statusDiagnosticCategorySet.has(input.category)
+    ) {
+      return;
+    }
+
+    const record: Record<string, string | number> = {
+      event: "doku.payment_status.diagnostic",
+      correlationId: input.correlationId,
+      stage: input.stage,
+      category: input.category,
+    };
+
+    if (
+      typeof input.httpStatus === "number" &&
+      Number.isInteger(input.httpStatus) &&
+      input.httpStatus >= 100 &&
+      input.httpStatus <= 599
+    ) {
+      record.httpStatus = input.httpStatus;
+    }
+
+    console.error(JSON.stringify(record));
+  } catch {
+    // Diagnostics must never interrupt payment status responses.
+  }
+}
