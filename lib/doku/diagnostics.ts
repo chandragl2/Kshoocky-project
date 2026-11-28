@@ -60,6 +60,8 @@ export type DokuCheckoutDiagnosticDetails = {
   supabaseSaveSucceeded?: boolean;
   supabaseMarkUncertainSucceeded?: boolean;
   transportFailure?: "timeout" | "network_rejection";
+  gatewayErrorCode?: string;
+  gatewayErrorMessage?: string;
 };
 
 export type DokuCheckoutDiagnosticLog = DokuCheckoutDiagnosticDetails & {
@@ -114,12 +116,64 @@ export class DokuCheckoutDiagnosticError extends Error {
   }
 }
 
+const maxGatewayErrorCodeLength = 64;
+const maxGatewayErrorMessageLength = 160;
+const gatewayErrorCodePattern = /^[A-Za-z0-9._-]{1,64}$/;
+const sensitiveGatewayCodePattern =
+  /https?:\/\/|@|HMACSHA256|Bearer|\b(?:BRN|MCH|SK)-[A-Za-z0-9_-]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
 function isOptionalBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
 }
 
 function isOptionalNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+export function sanitizeDokuGatewayErrorCode(
+  value: unknown,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.length > maxGatewayErrorCodeLength ||
+    sensitiveGatewayCodePattern.test(trimmed) ||
+    !gatewayErrorCodePattern.test(trimmed)
+  ) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+export function sanitizeDokuGatewayErrorMessage(
+  value: unknown,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const redacted = value
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\S+@\S+/g, " ")
+    .replace(/\b(?:HMACSHA256|Bearer|Basic)\s*[:=]?\s*\S+/gi, " ")
+    .replace(
+      /\b(?:secret(?:_?key)?|token|signature|authorization|password|client[_-]?id|api[_-]?key|digest)\s*[:=]\s*\S+/gi,
+      " ",
+    )
+    .replace(/\b(?:BRN|MCH|SK)-[A-Za-z0-9_-]+/g, " ")
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      " ",
+    )
+    .replace(/\b\d{8,}\b/g, " ")
+    .replace(/\b(?=[A-Za-z0-9+/=_-]{24,}\b)(?=.*\d)[A-Za-z0-9+/=_-]+\b/g, " ");
+
+  const sanitized = redacted
+    .replace(/[^A-Za-z0-9 .,;:_'()-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxGatewayErrorMessageLength)
+    .trim();
+
+  return sanitized.length > 0 ? sanitized : undefined;
 }
 
 export function logDokuCheckoutDiagnostic(
@@ -185,6 +239,18 @@ export function logDokuCheckoutDiagnostic(
       input.transportFailure === "network_rejection"
     ) {
       record.transportFailure = input.transportFailure;
+    }
+    const gatewayErrorCode = sanitizeDokuGatewayErrorCode(
+      input.gatewayErrorCode,
+    );
+    if (gatewayErrorCode) {
+      record.gatewayErrorCode = gatewayErrorCode;
+    }
+    const gatewayErrorMessage = sanitizeDokuGatewayErrorMessage(
+      input.gatewayErrorMessage,
+    );
+    if (gatewayErrorMessage) {
+      record.gatewayErrorMessage = gatewayErrorMessage;
     }
 
     console.error(JSON.stringify(record));

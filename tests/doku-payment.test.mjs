@@ -864,7 +864,9 @@ test("doku_checkout_diagnostics_distinguish_http_and_body_read_failures", async 
     (error) => {
       assert.equal(error.diagnostic.category, "gateway_http");
       assert.equal(error.diagnostic.httpStatus, 401);
-      assert.equal(error.diagnostic.responseBodyRead, false);
+      assert.equal(error.diagnostic.responseBodyRead, true);
+      assert.equal(error.diagnostic.gatewayErrorCode, undefined);
+      assert.equal(error.diagnostic.gatewayErrorMessage, undefined);
       assert.equal(error.message.includes("http body sentinel"), false);
       return true;
     },
@@ -2017,4 +2019,146 @@ test("doku_payment_status_diagnostics_emit_only_safe_allowlisted_fields", () => 
     );
   }
   assert.doesNotMatch(statusRoute, /console\.(log|error|warn)\(/);
+});
+
+test("doku_checkout_4xx_diagnostics_extract_sanitized_gateway_error_without_leaking_secrets", async () => {
+  assert.ok(checkoutModule, "expected DOKU Checkout request utilities");
+  assert.ok(diagnosticModule, "expected DOKU diagnostic logging utilities");
+
+  const dokuErrorPayload = JSON.stringify({
+    error: {
+      code: "invalid_request",
+      message:
+        "Invalid callback_url https://shop.example/payment/return?orderId=123e4567-e89b-42d3-a456-426614174000 for buyer@example.com with Client-Id: MCH-secret-123 and HMACSHA256=supersecrettokenvalue",
+    },
+    client_id: "MCH-raw-client-sentinel",
+    secret_key: secretKey,
+    signature: "HMACSHA256=raw-signature-sentinel",
+    customer: {
+      email: "raw-pii@example.com",
+      name: "Raw Customer Sentinel",
+    },
+  });
+
+  const originalError = console.error;
+  const loggedLines = [];
+  console.error = (message) => {
+    loggedLines.push(String(message));
+  };
+
+  try {
+    await assert.rejects(
+      checkoutModule.createDokuCheckoutSession({
+        config: sandboxConfig(),
+        requestId: "req-123",
+        body: checkoutBody,
+        fetchImpl: async () =>
+          new Response(dokuErrorPayload, {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          }),
+      }),
+      (error) => {
+        assert.equal(error.diagnostic.category, "gateway_http");
+        assert.equal(error.diagnostic.httpStatus, 400);
+        assert.equal(error.diagnostic.responseBodyRead, true);
+        assert.equal(error.diagnostic.gatewayErrorCode, "invalid_request");
+        assert.equal(
+          error.diagnostic.gatewayErrorMessage,
+          "Invalid callback_url for with and",
+        );
+        diagnosticModule.logDokuCheckoutDiagnostic({
+          correlationId: "123e4567-e89b-42d3-a456-426614174000",
+          gatewayRequestId: "123e4567-e89b-42d3-a456-426614174001",
+          ...error.diagnostic,
+        });
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      checkoutModule.createDokuCheckoutSession({
+        config: sandboxConfig(),
+        requestId: "req-123",
+        body: checkoutBody,
+        fetchImpl: async () =>
+          new Response(
+            JSON.stringify({
+              message: ["order.amount invalid", "order.invoice_number required"],
+            }),
+            { status: 400 },
+          ),
+      }),
+      (error) => {
+        assert.equal(error.diagnostic.category, "gateway_http");
+        assert.equal(error.diagnostic.httpStatus, 400);
+        assert.equal(error.diagnostic.responseBodyRead, true);
+        assert.equal(error.diagnostic.gatewayErrorCode, undefined);
+        assert.equal(
+          error.diagnostic.gatewayErrorMessage,
+          "order.amount invalid; order.invoice_number required",
+        );
+        return true;
+      },
+    );
+
+    await assert.rejects(
+      checkoutModule.createDokuCheckoutSession({
+        config: sandboxConfig(),
+        requestId: "req-123",
+        body: checkoutBody,
+        fetchImpl: async () =>
+          new Response("<html>502 Bad Gateway</html>", { status: 502 }),
+      }),
+      (error) => {
+        assert.equal(error.diagnostic.category, "gateway_http");
+        assert.equal(error.diagnostic.httpStatus, 502);
+        assert.equal(error.diagnostic.responseBodyRead, false);
+        assert.equal(error.diagnostic.gatewayErrorCode, undefined);
+        assert.equal(error.diagnostic.gatewayErrorMessage, undefined);
+        return true;
+      },
+    );
+
+    diagnosticModule.logDokuCheckoutDiagnostic({
+      correlationId: "123e4567-e89b-42d3-a456-426614174000",
+      stage: "gateway_http",
+      category: "gateway_http",
+      httpStatus: 400,
+      responseBodyRead: true,
+      gatewayErrorCode: "https://attacker.example/secret",
+      gatewayErrorMessage: `${"A".repeat(200)} secret=topsecret123`,
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(loggedLines.length, 2);
+  const firstLog = JSON.parse(loggedLines[0]);
+  assert.equal(firstLog.category, "gateway_http");
+  assert.equal(firstLog.httpStatus, 400);
+  assert.equal(firstLog.responseBodyRead, true);
+  assert.equal(firstLog.gatewayErrorCode, "invalid_request");
+  assert.equal(firstLog.gatewayErrorMessage, "Invalid callback_url for with and");
+
+  const secondLog = JSON.parse(loggedLines[1]);
+  assert.equal(secondLog.gatewayErrorCode, undefined);
+  assert.equal(secondLog.gatewayErrorMessage.length, 160);
+
+  const combinedLogs = loggedLines.join("\n");
+  for (const sentinel of [
+    "https://shop.example",
+    "buyer@example.com",
+    "MCH-secret-123",
+    "supersecrettokenvalue",
+    "MCH-raw-client-sentinel",
+    secretKey,
+    "raw-signature-sentinel",
+    "raw-pii@example.com",
+    "Raw Customer Sentinel",
+    "attacker.example",
+    "topsecret123",
+  ]) {
+    assert.equal(combinedLogs.includes(sentinel), false, `leaked ${sentinel}`);
+  }
 });

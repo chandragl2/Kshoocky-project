@@ -8,6 +8,8 @@ import {
 import { validateDokuPaymentUrl } from "./payment-url.ts";
 import {
   DokuCheckoutDiagnosticError,
+  sanitizeDokuGatewayErrorCode,
+  sanitizeDokuGatewayErrorMessage,
   type DokuCheckoutDiagnosticDetails,
   type DokuCheckoutDiagnosticReasonCode,
 } from "./diagnostics.ts";
@@ -21,6 +23,7 @@ export {
 const requestTarget = "/checkout/v1/payment";
 const responseTimestampToleranceMs = 5 * 60 * 1000;
 const requestTimeoutMs = 15_000;
+const maxGatewayErrorBodyLength = 16_384;
 
 type JsonObject = Record<string, unknown>;
 
@@ -35,6 +38,66 @@ export type DokuCheckoutSession = {
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function extractSafeGatewayErrorDetails(body: string): {
+  gatewayErrorCode?: string;
+  gatewayErrorMessage?: string;
+} {
+  if (!body || body.length > maxGatewayErrorBodyLength) {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return {};
+  }
+  if (!isObject(parsed)) {
+    return {};
+  }
+
+  let rawCode: unknown;
+  let rawMessage: unknown;
+
+  if (isObject(parsed.error)) {
+    rawCode = parsed.error.code ?? parsed.error.type;
+    rawMessage = parsed.error.message;
+  }
+
+  if (
+    rawCode === undefined &&
+    (typeof parsed.code === "string" || typeof parsed.code === "number")
+  ) {
+    rawCode = parsed.code;
+  }
+
+  if (rawMessage === undefined) {
+    if (typeof parsed.message === "string") {
+      rawMessage = parsed.message;
+    } else if (Array.isArray(parsed.message)) {
+      const stringMessages = parsed.message.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      );
+      if (stringMessages.length > 0) {
+        rawMessage = stringMessages.join("; ");
+      }
+    }
+  }
+
+  const gatewayErrorCode = sanitizeDokuGatewayErrorCode(
+    typeof rawCode === "number" && Number.isInteger(rawCode)
+      ? String(rawCode)
+      : rawCode,
+  );
+  const gatewayErrorMessage = sanitizeDokuGatewayErrorMessage(rawMessage);
+
+  return {
+    ...(gatewayErrorCode ? { gatewayErrorCode } : {}),
+    ...(gatewayErrorMessage ? { gatewayErrorMessage } : {}),
+  };
 }
 
 function amountValue(value: unknown) {
@@ -303,6 +366,29 @@ export async function createDokuCheckoutSession({
       });
     }
     if (response.status !== 200 && response.status !== 409) {
+      if (response.status >= 400 && response.status < 500) {
+        const declaredLength = Number(response.headers.get("content-length"));
+        const exceedsLimit =
+          Number.isFinite(declaredLength) &&
+          declaredLength > maxGatewayErrorBodyLength;
+        if (!exceedsLimit) {
+          let errorBody: string | null = null;
+          try {
+            errorBody = await Promise.race([response.text(), timeoutPromise]);
+          } catch {
+            errorBody = null;
+          }
+          if (errorBody !== null && !timeoutTriggered) {
+            const safeErrorDetails = extractSafeGatewayErrorDetails(errorBody);
+            throw new DokuCheckoutDiagnosticError("gateway_http", {
+              httpStatus: response.status,
+              requestDurationMs: Date.now() - requestStartedAt,
+              responseBodyRead: true,
+              ...safeErrorDetails,
+            });
+          }
+        }
+      }
       throw new DokuCheckoutDiagnosticError("gateway_http", {
         httpStatus: response.status,
         requestDurationMs: Date.now() - requestStartedAt,
