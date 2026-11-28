@@ -51,17 +51,41 @@ export function getDokuEnvironment(): DokuEnvironment {
   return configuredEnvironment === "production" ? "production" : "sandbox";
 }
 
+function parseExactDokuHost(configuredHost: string, errorMessage: string) {
+  let hostUrl: URL;
+  try {
+    hostUrl = new URL(`https://${configuredHost}`);
+  } catch {
+    throw new Error(errorMessage);
+  }
+  if (
+    hostUrl.hostname !== configuredHost ||
+    hostUrl.port ||
+    hostUrl.username ||
+    hostUrl.password ||
+    hostUrl.pathname !== "/" ||
+    hostUrl.search ||
+    hostUrl.hash ||
+    (hostUrl.hostname !== "doku.com" &&
+      !hostUrl.hostname.endsWith(".doku.com"))
+  ) {
+    throw new Error(errorMessage);
+  }
+  return configuredHost;
+}
+
 export function getDokuCheckoutUrlHost(
   environment: DokuEnvironment = getDokuEnvironment(),
 ) {
   const configuredHost = process.env.DOKU_CHECKOUT_URL_HOST?.trim();
   if (environment === "sandbox") {
-    if (configuredHost && configuredHost !== "sandbox.doku.com") {
-      throw new Error(
-        "DOKU_CHECKOUT_URL_HOST must be sandbox.doku.com in sandbox.",
-      );
+    if (!configuredHost) {
+      return "sandbox.doku.com";
     }
-    return "sandbox.doku.com";
+    return parseExactDokuHost(
+      configuredHost,
+      "DOKU_CHECKOUT_URL_HOST must be an exact sandbox host under doku.com.",
+    );
   }
 
   if (!configuredHost) {
@@ -69,22 +93,16 @@ export function getDokuCheckoutUrlHost(
       "DOKU_CHECKOUT_URL_HOST must be set to the production Checkout host verified with DOKU.",
     );
   }
-  const hostUrl = new URL(`https://${configuredHost}`);
-  if (
-    hostUrl.hostname !== configuredHost ||
-    hostUrl.port ||
-    hostUrl.pathname !== "/" ||
-    hostUrl.search ||
-    hostUrl.hash ||
-    (hostUrl.hostname !== "doku.com" &&
-      !hostUrl.hostname.endsWith(".doku.com")) ||
-    hostUrl.hostname === "sandbox.doku.com"
-  ) {
+  const productionHost = parseExactDokuHost(
+    configuredHost,
+    "DOKU_CHECKOUT_URL_HOST must be an exact production host under doku.com.",
+  );
+  if (productionHost === "sandbox.doku.com") {
     throw new Error(
       "DOKU_CHECKOUT_URL_HOST must be an exact production host under doku.com.",
     );
   }
-  return configuredHost;
+  return productionHost;
 }
 
 export function getDokuConfig(): DokuConfig {

@@ -5,11 +5,15 @@ import {
   isValidDokuTimestamp,
   verifyDokuSignature,
 } from "./signature.ts";
-import { validateDokuPaymentUrl } from "./payment-url.ts";
+import {
+  isAllowedDokuPaymentHost,
+  validateDokuPaymentUrl,
+} from "./payment-url.ts";
 import {
   DokuCheckoutDiagnosticError,
   sanitizeDokuGatewayErrorCode,
   sanitizeDokuGatewayErrorMessage,
+  sanitizeDokuGatewayPaymentUrlHost,
   type DokuCheckoutDiagnosticDetails,
   type DokuCheckoutDiagnosticReasonCode,
 } from "./diagnostics.ts";
@@ -210,7 +214,9 @@ function getPaymentUrlFailureReason(
   }
 
   if (url.protocol !== "https:") return "payment_url_invalid";
-  if (url.hostname !== expectedHost) return "payment_url_host_invalid";
+  if (!isAllowedDokuPaymentHost(url.hostname, expectedHost)) {
+    return "payment_url_host_invalid";
+  }
   if (
     url.port ||
     url.username ||
@@ -224,6 +230,16 @@ function getPaymentUrlFailureReason(
     return "payment_url_path_invalid";
   }
   return "payment_url_invalid";
+}
+
+function getSafePaymentUrlHost(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return sanitizeDokuGatewayPaymentUrlHost(url.hostname);
+  } catch {
+    return undefined;
+  }
 }
 
 function verifyResponseSignature(
@@ -559,6 +575,7 @@ export async function createDokuCheckoutSession({
   try {
     paymentUrl = validateDokuPaymentUrl(payment.url, config.checkoutUrlHost);
   } catch {
+    const gatewayPaymentUrlHost = getSafePaymentUrlHost(payment.url);
     throw new DokuCheckoutDiagnosticError("gateway_payload_validation", {
       ...responseDetails,
       invoiceMatches: true,
@@ -567,6 +584,7 @@ export async function createDokuCheckoutSession({
         payment.url,
         config.checkoutUrlHost,
       ),
+      ...(gatewayPaymentUrlHost ? { gatewayPaymentUrlHost } : {}),
     }, "payment_url_invalid");
   }
   let expiresAt: string;

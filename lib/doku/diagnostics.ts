@@ -62,6 +62,7 @@ export type DokuCheckoutDiagnosticDetails = {
   transportFailure?: "timeout" | "network_rejection";
   gatewayErrorCode?: string;
   gatewayErrorMessage?: string;
+  gatewayPaymentUrlHost?: string;
 };
 
 export type DokuCheckoutDiagnosticLog = DokuCheckoutDiagnosticDetails & {
@@ -118,7 +119,9 @@ export class DokuCheckoutDiagnosticError extends Error {
 
 const maxGatewayErrorCodeLength = 64;
 const maxGatewayErrorMessageLength = 160;
+const maxGatewayPaymentUrlHostLength = 253;
 const gatewayErrorCodePattern = /^[A-Za-z0-9._-]{1,64}$/;
+const gatewayPaymentUrlHostPattern = /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/;
 const sensitiveGatewayCodePattern =
   /https?:\/\/|@|HMACSHA256|Bearer|\b(?:BRN|MCH|SK)-[A-Za-z0-9_-]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -174,6 +177,22 @@ export function sanitizeDokuGatewayErrorMessage(
     .trim();
 
   return sanitized.length > 0 ? sanitized : undefined;
+}
+
+export function sanitizeDokuGatewayPaymentUrlHost(
+  value: unknown,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (
+    !normalized ||
+    normalized.length > maxGatewayPaymentUrlHostLength ||
+    normalized.includes("..") ||
+    !gatewayPaymentUrlHostPattern.test(normalized)
+  ) {
+    return undefined;
+  }
+  return normalized;
 }
 
 export function logDokuCheckoutDiagnostic(
@@ -251,6 +270,12 @@ export function logDokuCheckoutDiagnostic(
     );
     if (gatewayErrorMessage) {
       record.gatewayErrorMessage = gatewayErrorMessage;
+    }
+    const gatewayPaymentUrlHost = sanitizeDokuGatewayPaymentUrlHost(
+      input.gatewayPaymentUrlHost,
+    );
+    if (gatewayPaymentUrlHost) {
+      record.gatewayPaymentUrlHost = gatewayPaymentUrlHost;
     }
 
     console.error(JSON.stringify(record));

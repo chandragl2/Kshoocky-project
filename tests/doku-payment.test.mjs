@@ -1162,7 +1162,6 @@ test("doku_checkout_reports_allowlisted_reason_codes_for_response_validation_fai
     "DECLINED",
     "token-123",
     checkoutUrl,
-    "attacker.example",
     "token-sentinel",
     secretKey,
     "20261301000000",
@@ -2161,4 +2160,114 @@ test("doku_checkout_4xx_diagnostics_extract_sanitized_gateway_error_without_leak
   ]) {
     assert.equal(combinedLogs.includes(sentinel), false, `leaked ${sentinel}`);
   }
+});
+
+test("doku_sandbox_checkout_host_validation_and_safe_host_diagnostics", async () => {
+  assert.ok(paymentUrlModule, "browser-safe Checkout URL validator is available");
+  assert.ok(checkoutModule, "expected DOKU Checkout request utilities");
+  assert.ok(diagnosticModule, "expected DOKU diagnostic logging utilities");
+
+  const jokulSandboxUrl =
+    "https://jokul.doku.com/checkout-link-v2/ab1234567890";
+  assert.equal(
+    paymentUrlModule.validateDokuPaymentUrl(
+      jokulSandboxUrl,
+      "sandbox.doku.com",
+    ),
+    jokulSandboxUrl,
+  );
+
+  const baseEnvironment = {
+    DOKU_CLIENT_ID: "MCH-test",
+    DOKU_SECRET_KEY: secretKey,
+    DOKU_NOTIFICATION_URL: "https://shop.example/api/payments/doku/notify",
+    DOKU_RETURN_URL: "https://shop.example/payment/return",
+  };
+  withDokuEnvironment(
+    {
+      ...baseEnvironment,
+      DOKU_ENV: "sandbox",
+      DOKU_CHECKOUT_URL_HOST: "jokul.doku.com",
+    },
+    () => {
+      assert.equal(getDokuConfig().checkoutUrlHost, "jokul.doku.com");
+    },
+  );
+  withDokuEnvironment(
+    {
+      ...baseEnvironment,
+      DOKU_ENV: "sandbox",
+      DOKU_CHECKOUT_URL_HOST: "doku.com.evil.com",
+    },
+    () => {
+      assert.throws(() => getDokuConfig(), /DOKU_CHECKOUT_URL_HOST/);
+    },
+  );
+
+  const jokulResponseBody = checkoutSuccessBody().replace(
+    checkoutUrl,
+    jokulSandboxUrl,
+  );
+  const jokulSession = await checkoutModule.createDokuCheckoutSession({
+    config: sandboxConfig(),
+    requestId: "req-123",
+    body: checkoutBody,
+    fetchImpl: async () =>
+      signedCheckoutResponse({ responseBody: jokulResponseBody }),
+  });
+  assert.equal(jokulSession.paymentUrl, jokulSandboxUrl);
+
+  const originalError = console.error;
+  const loggedLines = [];
+  console.error = (message) => {
+    loggedLines.push(String(message));
+  };
+  try {
+    for (const [host, token] of [
+      ["evil.example.com", "secretTokenEvil123"],
+      ["doku.com.evil.com", "secretTokenSpoof456"],
+    ]) {
+      const evilUrl = `https://${host}/checkout-link-v2/${token}`;
+      const evilResponseBody = checkoutSuccessBody().replace(
+        checkoutUrl,
+        evilUrl,
+      );
+      await assert.rejects(
+        checkoutModule.createDokuCheckoutSession({
+          config: sandboxConfig(),
+          requestId: "req-123",
+          body: checkoutBody,
+          fetchImpl: async () =>
+            signedCheckoutResponse({ responseBody: evilResponseBody }),
+        }),
+        (error) => {
+          assert.equal(error.diagnostic.category, "gateway_payload_validation");
+          assert.equal(error.diagnostic.reasonCode, "payment_url_host_invalid");
+          assert.equal(error.diagnostic.gatewayPaymentUrlHost, host);
+          diagnosticModule.logDokuCheckoutDiagnostic({
+            correlationId: "123e4567-e89b-42d3-a456-426614174000",
+            gatewayRequestId: "123e4567-e89b-42d3-a456-426614174001",
+            ...error.diagnostic,
+          });
+          return true;
+        },
+      );
+    }
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(loggedLines.length, 2);
+  assert.equal(
+    JSON.parse(loggedLines[0]).gatewayPaymentUrlHost,
+    "evil.example.com",
+  );
+  assert.equal(
+    JSON.parse(loggedLines[1]).gatewayPaymentUrlHost,
+    "doku.com.evil.com",
+  );
+  const combinedLogs = loggedLines.join("\n");
+  assert.equal(combinedLogs.includes("secretTokenEvil123"), false);
+  assert.equal(combinedLogs.includes("secretTokenSpoof456"), false);
+  assert.equal(combinedLogs.includes("/checkout-link-v2/"), false);
 });

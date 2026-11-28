@@ -1,3 +1,33 @@
+const defaultSandboxCheckoutHosts = new Set([
+  "sandbox.doku.com",
+  "jokul.doku.com",
+]);
+
+function isDokuDomain(hostname: string) {
+  return hostname === "doku.com" || hostname.endsWith(".doku.com");
+}
+
+export function isAllowedDokuPaymentHost(
+  hostname: string,
+  expectedHost: string,
+) {
+  if (
+    !hostname ||
+    !expectedHost ||
+    !isDokuDomain(hostname) ||
+    !isDokuDomain(expectedHost)
+  ) {
+    return false;
+  }
+  if (hostname === expectedHost) {
+    return true;
+  }
+  return (
+    expectedHost === "sandbox.doku.com" &&
+    defaultSandboxCheckoutHosts.has(hostname)
+  );
+}
+
 export function validateDokuPaymentUrl(value: unknown, expectedHost: string) {
   if (typeof value !== "string") {
     throw new Error("DOKU Checkout payment URL is missing.");
@@ -10,7 +40,7 @@ export function validateDokuPaymentUrl(value: unknown, expectedHost: string) {
   }
   if (
     url.protocol !== "https:" ||
-    url.hostname !== expectedHost ||
+    !isAllowedDokuPaymentHost(url.hostname, expectedHost) ||
     url.port ||
     url.username ||
     url.password ||
